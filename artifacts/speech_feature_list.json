@@ -1,0 +1,13 @@
+[
+  "filler_count",
+  "token_count",
+  "type_count",
+  "type_token_ratio",
+  "ma_ttr",
+  "brunets_index",
+  "content_density",
+  "repetitions",
+  "sentence_count",
+  "average_words_per_sentence",
+  "total_seconds"
+]

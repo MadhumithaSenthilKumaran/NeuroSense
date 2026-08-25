@@ -1,0 +1,99 @@
+"""
+Scoring for the Cognitive Assessment module. Each test is scored 0-100
+so scores can be combined into a single normalized cognitive_score.
+"""
+
+MEMORY_WORDS = ["apple", "river", "chair", "book", "tiger", "window"]
+ATTENTION_SEQUENCE = ["A", "3", "B", "7", "C", "9", "D", "2"]
+VISUAL_MEMORY_GRID_SIZE = 9
+
+
+def score_memory_recall(recalled_words: list) -> dict:
+    recalled_norm = {w.strip().lower() for w in recalled_words if w.strip()}
+    correct = recalled_norm & set(MEMORY_WORDS)
+    score = round(100 * len(correct) / len(MEMORY_WORDS), 1)
+    return {"score": score, "correct_words": sorted(correct), "total_words": len(MEMORY_WORDS)}
+
+
+def score_reaction_time(reaction_times_ms: list) -> dict:
+    """Lower is better. Map typical 200-800ms range onto a 0-100 score."""
+    valid = [t for t in reaction_times_ms if isinstance(t, (int, float)) and t > 0]
+    if not valid:
+        return {"score": None, "avg_ms": None}
+    avg_ms = sum(valid) / len(valid)
+    # 200ms -> 100, 800ms+ -> 0 (clamped), linear in between.
+    score = max(0.0, min(100.0, 100 - ((avg_ms - 200) / (800 - 200)) * 100))
+    return {"score": round(score, 1), "avg_ms": round(avg_ms, 1)}
+
+
+def score_attention(user_answer: str) -> dict:
+    # Sequence: A 3 B 7 C 9 D 2  -> "what number came after B?" => 7
+    correct_answer = "7"
+    correct = str(user_answer).strip() == correct_answer
+    return {"score": 100.0 if correct else 0.0, "correct": correct, "expected": correct_answer}
+
+
+def score_visual_memory(selected_positions: list, target_positions: list) -> dict:
+    selected = set(selected_positions or [])
+    target = set(target_positions or [])
+    if not target:
+        return {"score": None}
+    correct = selected & target
+    score = round(100 * len(correct) / len(target), 1)
+    return {"score": score, "correct": len(correct), "total": len(target)}
+
+
+def score_pattern_recognition(answers: list) -> dict:
+    """answers: list of {"question_id", "selected", "correct"} bools already
+    resolved client-side against the served pattern set, or resolved here if
+    raw indices are passed."""
+    if not answers:
+        return {"score": None}
+    correct_count = sum(1 for a in answers if a.get("selected") == a.get("correct"))
+    score = round(100 * correct_count / len(answers), 1)
+    return {"score": score, "correct": correct_count, "total": len(answers)}
+
+
+def score_orientation(answers: dict, current_date: dict) -> dict:
+    """
+    answers: {year, month, day, city}
+    current_date: {year, month, day} (server-side ground truth; city is
+    self-reported so it only checks non-empty, not correctness).
+    """
+    checks = {
+        "year": str(answers.get("year", "")).strip() == str(current_date.get("year", "")),
+        "month": str(answers.get("month", "")).strip().lower() == str(current_date.get("month", "")).lower(),
+        "day": str(answers.get("day", "")).strip() == str(current_date.get("day", "")),
+        "city": bool(str(answers.get("city", "")).strip()),
+    }
+    correct_count = sum(checks.values())
+    score = round(100 * correct_count / len(checks), 1)
+    return {"score": score, "checks": checks}
+
+
+def compute_cognitive_score(sub_scores: dict) -> float:
+    """
+    Weighted composite. Memory and orientation weighted slightly higher as
+    they are the most established early markers in cognitive screening
+    literature (e.g. MMSE / MoCA domain weighting), reaction time weighted
+    lowest since it is the noisiest signal.
+    """
+    weights = {
+        "memory_recall": 0.25,
+        "reaction_time": 0.10,
+        "attention": 0.15,
+        "visual_memory": 0.15,
+        "pattern_recognition": 0.15,
+        "orientation": 0.20,
+    }
+    total_weight = 0.0
+    weighted_sum = 0.0
+    for key, weight in weights.items():
+        val = sub_scores.get(key)
+        if val is None:
+            continue
+        weighted_sum += val * weight
+        total_weight += weight
+    if total_weight == 0:
+        return 0.0
+    return round(weighted_sum / total_weight, 1)
