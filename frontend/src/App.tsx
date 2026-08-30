@@ -12,6 +12,7 @@ import Reports from './pages/Reports'
 import Knowledge from './pages/Knowledge'
 import Health from './pages/Health'
 import AdminDashboard from './pages/AdminDashboard'
+import Profile from './pages/Profile'
 import NavBar from './components/NavBar'
 import { AuthProvider, useAuth } from './context/AuthContext'
 
@@ -24,7 +25,7 @@ export default function App() {
   return (
     <AuthProvider>
       <NavBar />
-      <main style={{ padding: 20 }}>
+      <main className="app-main">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/health" element={<Health />} />
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/assessment/finalize/:id" element={<PrivateRoute><Finalize /></PrivateRoute>} />
 
           <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
+          <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
           <Route path="/admin/dashboard" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         </Routes>
       </main>

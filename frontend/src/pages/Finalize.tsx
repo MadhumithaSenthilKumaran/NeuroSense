@@ -14,7 +14,7 @@ export default function Finalize(){
       const res = await api.post(`/assessment/${id}/finalize`)
       setResult(res.data.assessment)
     }catch(err:any){
-      setError(err?.response?.data?.error || 'Failed to finalize')
+      setError(err?.response?.data?.error || err?.response?.data?.msg || 'Failed to finalize')
     }finally{setLoading(false)}
   }
 

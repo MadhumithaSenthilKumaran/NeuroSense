@@ -1,5 +1,8 @@
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class Config:
@@ -10,8 +13,8 @@ class Config:
     """
 
     # --- Core ---
-    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
-    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-jwt-secret-change-me")
+    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me-please-32")
+    JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "dev-jwt-secret-change-me-32-bytes!!")
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=8)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
@@ -31,7 +34,7 @@ class Config:
     WHISPER_MODEL_SIZE = os.environ.get("WHISPER_MODEL_SIZE", "base")
 
     # --- ML model artifact paths ---
-    MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.dirname(__file__), "ml", "artifacts"))
+    MODEL_DIR = os.environ.get("MODEL_DIR", os.path.join(os.path.dirname(__file__), "artifacts"))
     MODEL_PATH = os.path.join(MODEL_DIR, "xgboost_risk_model.json")
     SCALER_PATH = os.path.join(MODEL_DIR, "scaler.pkl")
     FEATURE_LIST_PATH = os.path.join(MODEL_DIR, "feature_list.json")

@@ -2,8 +2,22 @@ import React, { useState } from 'react'
 import api from '../api'
 import { useNavigate } from 'react-router-dom'
 
+const emptyForm = {
+  name: '',
+  email: '',
+  password: '',
+  age: '',
+  gender: '',
+  phone: '',
+  education: '',
+  occupation: '',
+  guardian_email: '',
+  guardian_phone: '',
+  consent_share: false,
+}
+
 export default function Register(){
-  const [form,setForm]=useState({name:'',email:'',password:''})
+  const [form,setForm]=useState(emptyForm)
   const [error,setError]=useState('')
   const navigate = useNavigate()
 
@@ -18,15 +32,26 @@ export default function Register(){
   }
 
   return (
-    <div style={{maxWidth:480}}>
-      <h2>Register</h2>
-      <form onSubmit={submit}>
-        <div><label>Name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></div>
-        <div><label>Email</label><input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
-        <div><label>Password</label><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} /></div>
-        {error && <div style={{color:'red'}}>{error}</div>}
-        <button type="submit">Register</button>
-      </form>
+    <div className="auth-layout">
+      <div className="auth-copy"><div className="eyebrow">Begin your journey</div><h1>Small steps, <span className="auth-accent">better insight.</span></h1><p>Create a private NeuroSense account and build a personal picture of the signals that shape your wellbeing.</p></div>
+      <div className="auth-card auth-card-wide"><h2>Create account</h2><form onSubmit={submit} className="auth-form-grid">
+        <div className="form-field"><label>Name</label><input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} /></div>
+        <div className="form-field"><label>Email</label><input type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+        <div className="form-field"><label>Password</label><input type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} /></div>
+        <div className="form-field"><label>Age</label><input type="number" value={form.age} onChange={e=>setForm({...form,age:e.target.value})} /></div>
+        <div className="form-field"><label>Gender</label><input value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})} /></div>
+        <div className="form-field"><label>Phone number</label><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} /></div>
+        <div className="form-field"><label>Education</label><input value={form.education} onChange={e=>setForm({...form,education:e.target.value})} /></div>
+        <div className="form-field"><label>Occupation</label><input value={form.occupation} onChange={e=>setForm({...form,occupation:e.target.value})} /></div>
+        <div className="form-field"><label>Guardian email</label><input type="email" value={form.guardian_email} onChange={e=>setForm({...form,guardian_email:e.target.value})} /></div>
+        <div className="form-field"><label>Guardian phone</label><input value={form.guardian_phone} onChange={e=>setForm({...form,guardian_phone:e.target.value})} /></div>
+        <label className="consent-box consent-box-inline">
+          <input type="checkbox" checked={form.consent_share} onChange={e=>setForm({...form,consent_share:e.target.checked})} />
+          I consent to share assessment updates with my guardian.
+        </label>
+        {error && <div className="form-error">{error}</div>}
+        <button className="form-submit" type="submit">Register</button>
+      </form></div>
     </div>
   )
 }

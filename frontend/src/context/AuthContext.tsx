@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { setAuthToken } from '../api'
+import api, { setAuthToken } from '../api'
 
 type AuthContextType = {
   token: string | null
   user: any | null
   login: (token: string, user?: any) => void
   logout: () => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -23,6 +24,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [token])
 
+  useEffect(() => {
+    if (!token) {
+      setUser(null)
+      return
+    }
+    const load = async () => {
+      try {
+        const res = await api.get('/auth/me')
+        setUser(res.data.user)
+      } catch {
+        setUser(null)
+      }
+    }
+    load()
+  }, [token])
+
   const login = (t: string, u?: any) => {
     setToken(t)
     if (u) setUser(u)
@@ -32,8 +49,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null)
   }
 
+  const refreshUser = async () => {
+    if (!token) return
+    try {
+      const res = await api.get('/auth/me')
+      setUser(res.data.user)
+    } catch {
+      setUser(null)
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ token, user, login, logout }}>
+    <AuthContext.Provider value={{ token, user, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

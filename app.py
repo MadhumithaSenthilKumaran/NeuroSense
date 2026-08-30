@@ -1,13 +1,9 @@
 import os
 from flask import Flask, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
 
 from config import Config
 from extensions import jwt, init_db
-
-load_dotenv()
-
 
 def create_app(config_class=Config):
     app = Flask(__name__)

@@ -5,24 +5,26 @@ import { useAuth } from '../context/AuthContext'
 export default function NavBar() {
   const { token, logout } = useAuth()
   return (
-    <nav className="flex items-center justify-between px-4 py-3 bg-white shadow-sm">
-      <div className="space-x-4">
-        <Link to="/" className="font-semibold">NeuroSense</Link>
-        <Link to="/knowledge" className="text-sm text-gray-600">About</Link>
-        <Link to="/health" className="text-sm text-gray-600">Health</Link>
+    <nav className="site-nav">
+      <div className="nav-links">
+        <Link to="/" className="brand-mark">NeuroSense</Link>
+        <Link to="/knowledge" className="nav-link">About</Link>
+        <Link to="/health" className="nav-link">Health</Link>
       </div>
-      <div>
+      <div className="nav-actions">
         {token ? (
-          <div className="space-x-3">
-            <Link to="/dashboard" className="text-sm">Dashboard</Link>
-            <Link to="/admin/dashboard" className="text-sm">Admin</Link>
-            <a href="#" onClick={(e)=>{e.preventDefault(); logout();}} className="text-sm text-red-600">Logout</a>
-          </div>
+          <>
+            <Link to="/dashboard" className="nav-link nav-link-strong">Dashboard</Link>
+            <Link to="/profile" className="nav-link">Profile</Link>
+            <Link to="/reports" className="nav-link">Reports</Link>
+            <Link to="/admin/dashboard" className="nav-link">Admin</Link>
+            <button onClick={logout} className="nav-logout">Logout</button>
+          </>
         ) : (
-          <div className="space-x-3">
-            <Link to="/login" className="text-sm">Login</Link>
-            <Link to="/register" className="text-sm">Register</Link>
-          </div>
+          <>
+            <Link to="/login" className="nav-link">Login</Link>
+            <Link to="/register" className="nav-link nav-link-strong">Register</Link>
+          </>
         )}
       </div>
     </nav>

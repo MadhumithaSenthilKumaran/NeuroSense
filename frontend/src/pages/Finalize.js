@@ -15,7 +15,7 @@ export default function Finalize() {
             setResult(res.data.assessment);
         }
         catch (err) {
-            setError(err?.response?.data?.error || 'Failed to finalize');
+            setError(err?.response?.data?.error || err?.response?.data?.msg || 'Failed to finalize');
         }
         finally {
             setLoading(false);

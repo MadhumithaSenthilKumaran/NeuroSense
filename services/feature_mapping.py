@@ -17,6 +17,14 @@ def _flag(value_yes: bool) -> int:
     return 1 if value_yes else 0
 
 
+def _education_level(value) -> int:
+    try:
+        years = float(value or 0)
+    except (TypeError, ValueError):
+        years = 0
+    return min(3, max(0, int(years // 5)))
+
+
 def map_questionnaire_to_clinical_features(answers: dict, concern_answers: dict = None) -> dict:
     concern_answers = concern_answers or {}
 
@@ -37,7 +45,7 @@ def map_questionnaire_to_clinical_features(answers: dict, concern_answers: dict 
         "Age": float(answers.get("age") or 0),
         "Gender": 1 if str(answers.get("gender", "")).lower().startswith("f") else 0,
         "Ethnicity": 0,  # not collected — self-reported ethnicity intentionally excluded from UI
-        "EducationLevel": min(3, max(0, int((answers.get("education_years") or 0) // 5))),
+        "EducationLevel": _education_level(answers.get("education_years")),
         "BMI": float(answers.get("bmi")) if answers.get("bmi") not in (None, "") else 24.0,
         "Smoking": 1 if smoking == "Current smoker" else 0,
         "AlcoholConsumption": alcohol_map.get(alcohol, 4.0),

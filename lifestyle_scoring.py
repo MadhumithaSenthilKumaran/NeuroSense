@@ -11,8 +11,8 @@ any real-world use.
 """
 
 LIFESTYLE_QUESTIONS = [
-    {"id": "age", "text": "What is your age?", "type": "number"},
-    {"id": "education_years", "text": "Years of formal education", "type": "number"},
+    {"id": "age", "text": "What is your age?", "type": "slider", "min": 18, "max": 100},
+    {"id": "education_years", "text": "Years of formal education", "type": "slider", "min": 0, "max": 20},
     {"id": "smoking", "text": "Do you currently smoke?", "type": "radio",
      "options": ["Never", "Former smoker", "Current smoker"]},
     {"id": "alcohol", "text": "How often do you drink alcohol?", "type": "radio",
@@ -41,8 +41,8 @@ LIFESTYLE_QUESTIONS = [
      "options": ["No", "Mild", "Moderate/Severe"]},
     {"id": "physical_activity", "text": "General physical activity level", "type": "radio",
      "options": ["Sedentary", "Light", "Moderate", "Active"]},
-    {"id": "bmi", "text": "What is your BMI? (leave blank if unknown)", "type": "number"},
-    {"id": "medication_count", "text": "Number of daily medications", "type": "number"},
+    {"id": "bmi", "text": "What is your BMI? (leave blank if unknown)", "type": "slider", "min": 10, "max": 50},
+    {"id": "medication_count", "text": "Number of daily medications", "type": "slider", "min": 0, "max": 15},
     {"id": "memory_complaints", "text": "Do you personally notice memory problems?", "type": "radio",
      "options": ["No", "Occasionally", "Frequently"]},
     {"id": "word_finding_difficulty", "text": "Difficulty finding the right words?", "type": "radio",

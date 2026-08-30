@@ -24,14 +24,14 @@ export default function Login(){
   }
 
   return (
-    <div style={{maxWidth:480}}>
-      <h2>Login</h2>
-      <form onSubmit={submit}>
-        <div><label>Email</label><input value={email} onChange={e=>setEmail(e.target.value)} /></div>
-        <div><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} /></div>
-        {error && <div style={{color:'red'}}>{error}</div>}
-        <button type="submit">Login</button>
-      </form>
+    <div className="auth-layout">
+      <div className="auth-copy"><div className="eyebrow">A clearer picture of you</div><h1>Understand your mind, <span className="auth-accent">gently.</span></h1><p>NeuroSense brings together meaningful signals to help you notice patterns and make informed next steps.</p></div>
+      <div className="auth-card"><h2>Welcome back</h2><form onSubmit={submit}>
+        <div className="form-field"><label>Email</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} /></div>
+        <div className="form-field"><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} /></div>
+        {error && <div className="form-error">{error}</div>}
+        <button className="form-submit" type="submit">Login</button>
+      </form></div>
     </div>
   )
 }

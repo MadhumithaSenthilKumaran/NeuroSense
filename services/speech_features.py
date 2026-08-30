@@ -94,6 +94,18 @@ def waveform_points(audio_path: str, target_points: int = 400):
     y, sr = librosa.load(audio_path, sr=None, mono=True)
     if len(y) == 0:
         return []
-    step = max(1, len(y) // target_points)
-    downsampled = y[::step]
-    return [round(float(v), 4) for v in downsampled]
+
+    y = np.nan_to_num(y)
+    peak = np.max(np.abs(y)) or 1.0
+    y = y / peak
+    y = np.sign(y) * np.power(np.abs(y), 0.7)
+
+    window = max(1, len(y) // max(1, target_points))
+    if window > 1:
+        chunks = [y[i:i + window] for i in range(0, len(y), window)]
+        values = [float(np.sqrt(np.mean(np.square(chunk)))) for chunk in chunks if len(chunk)]
+    else:
+        values = [float(v) for v in y]
+
+    values = values[:target_points]
+    return [round(float(v), 4) for v in values]

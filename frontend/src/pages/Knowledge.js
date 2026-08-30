@@ -6,5 +6,11 @@ export default function Knowledge() {
     useEffect(() => {
         api.get('/knowledge/articles').then(r => setArticles(r.data.articles)).catch(() => { });
     }, []);
-    return (_jsxs("div", { children: [_jsx("h2", { children: "Knowledge base" }), articles.map(a => (_jsxs("div", { style: { border: '1px solid #eee', padding: 10, marginBottom: 8 }, children: [_jsx("h3", { children: a.title }), _jsx("div", { children: a.summary }), _jsxs("div", { style: { fontSize: 12, color: '#666' }, children: ["Source: ", a.source] })] }, a.title)))] }));
+    const grouped = articles.reduce((acc, article) => {
+        const topic = article.tags?.[0] || 'general';
+        const existing = acc[topic] || [];
+        acc[topic] = [...existing, article];
+        return acc;
+    }, {});
+    return (_jsxs("div", { className: "knowledge-page", children: [_jsxs("div", { className: "page-intro", children: [_jsx("div", { className: "eyebrow", children: "Evidence-based guidance" }), _jsx("h1", { children: "Brain health knowledge base" }), _jsx("p", { children: "Clear, practical information about habits that may support memory, resilience, and healthy aging." })] }), _jsx("div", { className: "knowledge-grid", children: Object.entries(grouped).map(([topic, items]) => (_jsxs("section", { className: "knowledge-card", children: [_jsx("div", { className: "knowledge-header", children: _jsx("span", { className: "knowledge-tag", children: topic.replace(/_/g, ' ') }) }), items.map((a) => (_jsxs("article", { className: "knowledge-article", children: [_jsx("h3", { children: a.title || 'Brain health update' }), _jsx("p", { children: a.summary || a.text }), _jsxs("div", { className: "knowledge-meta", children: [_jsx("span", { children: a.source }), a.tags?.slice(0, 3).map((tag) => (_jsx("span", { className: "mini-pill", children: tag.replace(/_/g, ' ') }, tag)))] })] }, a.id || a.title || a.source)))] }, topic))) })] }));
 }

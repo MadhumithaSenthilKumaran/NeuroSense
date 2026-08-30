@@ -29,6 +29,7 @@ def register():
         password_hash=hash_password(data["password"]),
         age=data.get("age"),
         gender=data.get("gender"),
+        phone=data.get("phone"),
         education=data.get("education"),
         occupation=data.get("occupation"),
         guardian_email=data.get("guardian_email"),
@@ -38,7 +39,12 @@ def register():
     result = db.users.insert_one(doc)
     user_id = str(result.inserted_id)
     token = create_access_token(identity=user_id, additional_claims={"role": "user"})
-    return jsonify(access_token=token, user={"id": user_id, "name": doc["name"], "email": doc["email"]}), 201
+    user_payload = {k: doc[k] for k in [
+        "name", "email", "age", "gender", "phone",
+        "education", "occupation", "guardian_email", "guardian_phone", "consent_share"
+    ] if k in doc}
+    user_payload["id"] = user_id
+    return jsonify(access_token=token, user=user_payload), 201
 
 
 @auth_bp.post("/login")
@@ -55,10 +61,9 @@ def login():
     token = create_access_token(
         identity=str(user["_id"]), additional_claims={"role": user.get("role", "user")}
     )
-    return jsonify(
-        access_token=token,
-        user={"id": str(user["_id"]), "name": user["name"], "email": user["email"], "role": user.get("role", "user")},
-    )
+    safe_user = {k: v for k, v in user.items() if k not in {"_id", "password_hash"}}
+    safe_user["id"] = str(user["_id"])
+    return jsonify(access_token=token, user=safe_user)
 
 
 @auth_bp.post("/forgot-password")
@@ -124,7 +129,7 @@ def update_me():
     from bson import ObjectId
     data = request.get_json(force=True) or {}
     allowed = {
-        "name", "age", "gender", "education", "occupation",
+        "name", "age", "gender", "phone", "education", "occupation",
         "guardian_email", "guardian_phone", "consent_share",
     }
     updates = {k: v for k, v in data.items() if k in allowed}

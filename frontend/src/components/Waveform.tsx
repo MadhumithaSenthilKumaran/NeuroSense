@@ -23,21 +23,29 @@ export default function Waveform({ points }: Props) {
       const w = canvas.width
       const h = canvas.height
       ctx.clearRect(0, 0, w, h)
+
+      const gradient = ctx.createLinearGradient(0, 0, w, 0)
+      gradient.addColorStop(0, '#e0e7ff')
+      gradient.addColorStop(0.5, '#6366f1')
+      gradient.addColorStop(1, '#0f172a')
       ctx.fillStyle = '#f8fafc'
       ctx.fillRect(0, 0, w, h)
+
       if (!points || points.length === 0) return
-      ctx.lineWidth = 1.5 * DPR
-      ctx.strokeStyle = '#4f46e5'
-      ctx.beginPath()
-      const step = w / points.length
-      for (let i = 0; i < points.length; i++) {
-        const x = i * step
-        const v = points[i]
-        const y = (1 - (v + 1) / 2) * h // assuming points in [-1,1]
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
+
+      const values = points.map(v => Math.max(0, Math.min(1, Math.abs(v))))
+      const step = w / values.length
+      const midY = h / 2
+      const maxBarHeight = h * 0.76
+
+      for (let i = 0; i < values.length; i++) {
+        const x = i * step + 0.5
+        const amplitude = values[i]
+        const barHeight = Math.max(2, amplitude * maxBarHeight)
+        const y = midY - barHeight / 2
+        ctx.fillStyle = gradient
+        ctx.fillRect(x, y, Math.max(1, step * 0.75), barHeight)
       }
-      ctx.stroke()
     }
 
     const ro = new ResizeObserver(resize)
