@@ -35,9 +35,15 @@ def new_user_doc(
     }
 
 
-def new_assessment_doc(user_id):
+def new_assessment_doc(user_id, session_number=1, cycle_id=None, scheduled_for=None, assigned_sets=None):
+    cycle_id = cycle_id or str(__import__("uuid").uuid4())
     return {
         "user_id": user_id,
+        "cycle_id": cycle_id,
+        "session_number": session_number,
+        "scheduled_for": scheduled_for,
+        "tests": ["lifestyle", "cognitive", "speech", "self_concern"],
+        "assigned_sets": assigned_sets or {},
         "status": "in_progress",
         "created_at": now(),
         "updated_at": now(),

@@ -3,11 +3,53 @@ import uuid
 from flask import Blueprint, jsonify, send_file, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
+from pymongo import ReturnDocument
 
 from extensions import get_db
 from services.pdf_report import build_report_pdf
+from services.rag import generate_longitudinal_recommendations
+from services.session_assessment import trend
 
 reports_bp = Blueprint("reports", __name__)
+
+
+@reports_bp.post("/final/<cycle_id>")
+@jwt_required()
+def generate_final_report(cycle_id):
+    db = get_db()
+    sessions = list(db.assessments.find({"cycle_id": cycle_id, "user_id": get_jwt_identity(), "status": "completed"}).sort("session_number", 1))
+    if len(sessions) < 3:
+        return jsonify(error="Complete all three sessions before generating the final report"), 400
+    rows = []
+    for session in sessions:
+        modalities = session.get("modality_scores", {})
+        rows.append({
+            "session_number": session.get("session_number"),
+            "risk_probability": session.get("risk_probability"),
+            "risk_class": session.get("risk_class"),
+            "cognitive_score": (session.get("cognitive_result") or {}).get("overall_cognitive_score"),
+            "speech_score": modalities.get("speech"),
+            "clinical_score": session.get("clinical_probability", modalities.get("clinical")),
+            "concern_score": session.get("clinical_concern_score", session.get("concern_score")),
+            "lifestyle_score": session.get("lifestyle_score"),
+            "lifestyle_probability": session.get("lifestyle_probability"),
+            "modality_scores": modalities,
+        })
+    report_data = {
+        "cycle_id": cycle_id,
+        "sessions": rows,
+        "trends": {key: trend([row.get(key) for row in rows]) for key in (
+            "risk_probability", "cognitive_score", "speech_score",
+            "clinical_score", "concern_score", "lifestyle_score",
+        )},
+        "recommendations": generate_longitudinal_recommendations(rows),
+    }
+    result = db.reports.find_one_and_update(
+        {"cycle_id": cycle_id, "user_id": get_jwt_identity(), "report_type": "final"},
+        {"$set": {"report_data": report_data, "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc)}},
+        upsert=True, return_document=ReturnDocument.AFTER,
+    )
+    return jsonify(report_id=str(result["_id"]), report=report_data), 201
 
 
 @reports_bp.post("/generate/<assessment_id>")

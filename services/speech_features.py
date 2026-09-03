@@ -58,6 +58,7 @@ def extract_features(audio_path: str, transcript: str = None) -> dict:
 
     # Pause duration
     pause_duration_s = float(_pause_duration_seconds(y, sr))
+    pause_rate = round(pause_duration_s / duration_s, 4) if duration_s else 0.0
 
     # Spectral centroid
     spectral_centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
@@ -80,6 +81,7 @@ def extract_features(audio_path: str, transcript: str = None) -> dict:
         "mfcc_std": [round(v, 4) for v in mfcc_std],
         "pitch_hz": round(pitch_hz, 2) if pitch_hz else None,
         "speech_rate_wpm": speech_rate_wpm,
+        "pause_rate": pause_rate,
         "energy": round(energy, 5),
         "pause_duration_s": round(pause_duration_s, 2),
         "spectral_centroid": round(spectral_centroid, 2),

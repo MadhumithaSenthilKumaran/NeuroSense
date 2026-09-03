@@ -82,6 +82,7 @@ def extract_features(audio_path: str, transcript: str = None) -> dict:
         "speech_rate_wpm": speech_rate_wpm,
         "energy": round(energy, 5),
         "pause_duration_s": round(pause_duration_s, 2),
+        "pause_rate": round(pause_duration_s / duration_s, 4) if duration_s else 0.0,
         "spectral_centroid": round(spectral_centroid, 2),
         "zero_crossing_rate": round(zcr, 5),
         "chroma_mean": round(chroma_mean, 4),

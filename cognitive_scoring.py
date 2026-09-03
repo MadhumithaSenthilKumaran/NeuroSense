@@ -8,11 +8,26 @@ ATTENTION_SEQUENCE = ["A", "3", "B", "7", "C", "9", "D", "2"]
 VISUAL_MEMORY_GRID_SIZE = 9
 
 
-def score_memory_recall(recalled_words: list) -> dict:
+def score_memory_recall(recalled_words: list, memory_words=None) -> dict:
+    memory_words = memory_words or MEMORY_WORDS
     recalled_norm = {w.strip().lower() for w in recalled_words if w.strip()}
-    correct = recalled_norm & set(MEMORY_WORDS)
-    score = round(100 * len(correct) / len(MEMORY_WORDS), 1)
-    return {"score": score, "correct_words": sorted(correct), "total_words": len(MEMORY_WORDS)}
+    correct = recalled_norm & {word.lower() for word in memory_words}
+    score = round(100 * len(correct) / len(memory_words), 1)
+    return {"score": score, "correct_words": sorted(correct), "total_words": len(memory_words)}
+
+
+def score_story_recall(answers: list, questions: list) -> dict:
+    if not questions:
+        return {"score": None, "correct": 0, "total": 0}
+    correct = 0
+    results = []
+    for index, question in enumerate(questions):
+        response = str((answers or [])[index] if index < len(answers or []) else "").strip().lower()
+        expected = str(question.get("answer", "")).strip().lower()
+        matched = bool(response and expected and (expected in response or response in expected))
+        correct += int(matched)
+        results.append({"question": question.get("question"), "correct": matched})
+    return {"score": round(100 * correct / len(questions), 1), "correct": correct, "total": len(questions), "results": results}
 
 
 def score_reaction_time(reaction_times_ms: list) -> dict:
@@ -80,6 +95,7 @@ def compute_cognitive_score(sub_scores: dict) -> float:
     """
     weights = {
         "memory_recall": 0.25,
+        "story_recall": 0.15,
         "reaction_time": 0.10,
         "attention": 0.15,
         "visual_memory": 0.15,

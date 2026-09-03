@@ -7,21 +7,111 @@ from extensions import get_db
 from services.fusion import fuse
 from services.feature_mapping import map_questionnaire_to_clinical_features
 from services.linguistic_features import extract_linguistic_features
-from services.rag import generate_recommendations
+from services.rag import generate_recommendations, generate_longitudinal_recommendations
+from services.session_assessment import STORY_BANK, assign_sets, build_cycle_schedule, trend
+from services.lifestyle_scoring import score_lifestyle
 
 assessment_bp = Blueprint("assessment", __name__)
 
 
 @assessment_bp.post("/start")
 @jwt_required()
-def start_assessment():
+def start_assessment(cycle_id_override=None, session_number_override=None):
     from models.schemas import new_assessment_doc
     db = get_db()
-    doc = new_assessment_doc(get_jwt_identity())
+    user_id = get_jwt_identity()
+    data = request.get_json(silent=True) or {}
+    now = datetime.now(timezone.utc)
+    cycle_id = cycle_id_override or data.get("cycle_id")
+    cycle = None
+    session_number = int(session_number_override or data.get("session_number", 1))
+    if session_number not in (1, 2, 3):
+        return jsonify(error="session_number must be 1, 2, or 3"), 400
+
+    if cycle_id:
+        cycle = db.assessment_cycles.find_one({"cycle_id": cycle_id, "user_id": user_id})
+        if not cycle:
+            return jsonify(error="Assessment cycle not found"), 404
+        previous = list(db.assessments.find({"cycle_id": cycle_id, "user_id": user_id}))
+        if any(item.get("session_number") == session_number for item in previous):
+            return jsonify(error="This session has already been started"), 409
+        started_at = cycle["started_at"]
+    else:
+        cycle_id = __import__("uuid").uuid4().hex
+        started_at = now
+        cycle_schedule = build_cycle_schedule(started_at)
+        db.assessment_cycles.insert_one({
+            "cycle_id": cycle_id, "user_id": user_id, "started_at": started_at,
+            "schedule": cycle_schedule, "status": "in_progress",
+        })
+        cycle = {"schedule": cycle_schedule, "started_at": started_at}
+
+    schedule = next(item for item in build_cycle_schedule(started_at) if item["session_number"] == session_number)
+    if cycle_id and session_number > 1 and now.date().isoformat() < schedule["scheduled_for"]:
+        return jsonify(error=f"Session {session_number} is available on {schedule['scheduled_for']}"), 403
+
+    prior = list(db.assessments.find({"user_id": user_id}, {"cycle_id": 1, "session_number": 1, "assigned_sets": 1}).sort("session_number", 1))
+    used = {key: [item.get("assigned_sets", {}).get(key, {}).get("id") for item in prior]
+            for key in ("story", "memory", "speech")}
+
+    current_cycle_prior = [item for item in prior if item.get("cycle_id") == cycle_id]
+    previous_assessment = next(
+        (item for item in current_cycle_prior if item.get("session_number") == session_number - 1),
+        None,
+    )
+    if session_number > 1 and not previous_assessment:
+        return jsonify(error=f"Complete Session {session_number - 1} before starting Session {session_number}"), 409
+    previous_story_id = (previous_assessment or {}).get("assigned_sets", {}).get("story", {}).get("id")
+    assigned_sets = assign_sets(
+        used["story"],
+        used["memory"],
+        used["speech"],
+        preferred_story_id=previous_story_id,
+    )
+    if session_number > 1:
+        previous_story = (previous_assessment or {}).get("assigned_sets", {}).get("story")
+        if previous_story:
+            assigned_sets["story_questions"] = previous_story.get("questions", []) or next(
+                (item.get("questions", []) for item in STORY_BANK
+                 if item.get("id") == previous_story.get("id")),
+                [],
+            )
+    doc = new_assessment_doc(user_id, session_number, cycle_id, schedule["scheduled_for"], assigned_sets)
+    doc["cycle_schedule"] = cycle.get("schedule", build_cycle_schedule(started_at))
     result = db.assessments.insert_one(doc)
+    db.assessment_cycles.update_one(
+        {"cycle_id": cycle_id},
+        {"$set": {f"schedule.{session_number - 1}.status": "started"}},
+    )
     doc["_id"] = str(result.inserted_id)
     doc["created_at"] = doc["created_at"].isoformat()
     return jsonify(assessment=doc), 201
+
+
+@assessment_bp.post("/<assessment_id>/next")
+@jwt_required()
+def start_next_session(assessment_id):
+    db = get_db()
+    current = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
+    if not current:
+        return jsonify(error="Assessment not found"), 404
+    next_number = int(current.get("session_number", 1)) + 1
+    if next_number > 3:
+        return jsonify(error="The three-session cycle is complete"), 400
+    return start_assessment(current.get("cycle_id"), next_number)
+
+
+@assessment_bp.get("/cycle/<cycle_id>")
+@jwt_required()
+def get_cycle(cycle_id):
+    db = get_db()
+    cycle = db.assessment_cycles.find_one({"cycle_id": cycle_id, "user_id": get_jwt_identity()}, {"_id": 0})
+    if not cycle:
+        return jsonify(error="Assessment cycle not found"), 404
+    sessions = list(db.assessments.find({"cycle_id": cycle_id}, {"_id": 1, "session_number": 1, "status": 1, "scheduled_for": 1, "risk_class": 1, "modality_scores": 1}).sort("session_number", 1))
+    for session in sessions:
+        session["assessment_id"] = str(session.pop("_id"))
+    return jsonify(cycle=cycle, sessions=sessions)
 
 
 @assessment_bp.get("/<assessment_id>")
@@ -92,18 +182,92 @@ def finalize_assessment(assessment_id):
     )
 
     now = datetime.now(timezone.utc)
+    lifestyle_score = lifestyle_doc.get("lifestyle_score")
+    if lifestyle_score is None:
+        lifestyle_score = score_lifestyle(lifestyle_doc.get("answers", {})).get("lifestyle_score")
+    lifestyle_probability = round(1 - (float(lifestyle_score) / 100), 4) if lifestyle_score is not None else None
+    cycle = db.assessment_cycles.find_one({"cycle_id": assessment.get("cycle_id"), "user_id": get_jwt_identity()}) or {}
+    cycle_schedule = build_cycle_schedule(cycle.get("started_at") or assessment.get("created_at") or now)
+    next_schedule = next(
+        (item for item in cycle_schedule if item["session_number"] == assessment.get("session_number", 1) + 1),
+        None,
+    )
+    schedule_message = (
+        f"Your next assessment is scheduled for {next_schedule['scheduled_for']}. "
+        "Please attend on that scheduled date."
+        if next_schedule else "This is the final assessment in the one-week cycle."
+    )
     update = {
         "status": "completed",
         "completed_at": now,
         "fused_features": clinical_features,
+        "lifestyle_score": lifestyle_score,
+        "lifestyle_probability": lifestyle_probability,
+        "clinical_probability": fusion_result["modality_scores"].get("clinical"),
+        "clinical_concern_score": concern_score,
         "risk_probability": fusion_result["risk_probability"],
         "risk_class": fusion_result["risk_class"],
         "modality_scores": fusion_result["modality_scores"],
         "shap_top_features": fusion_result["shap_top_features"],
         "used_modalities": fusion_result["used_modalities"],
         "recommendations": recommendations,
+        "next_assessment_suggestion": schedule_message,
+        "next_session_date": next_schedule["scheduled_for"] if next_schedule else None,
+        "cycle_schedule": cycle_schedule,
     }
     db.assessments.update_one({"_id": ObjectId(assessment_id)}, {"$set": update})
+    session_report = {
+        "assessment_id": assessment_id,
+        "cycle_id": assessment.get("cycle_id"),
+        "user_id": get_jwt_identity(),
+        "report_type": "session",
+        "session_number": assessment.get("session_number", 1),
+        "report_data": {
+            **update,
+            "lifestyle_response": lifestyle_doc,
+            "clinical_concern_score": concern_score,
+            "cognitive_result": cognitive_result,
+            "speech_features": speech_docs,
+        },
+        "generated_at": now,
+    }
+    db.reports.update_one(
+        {"assessment_id": assessment_id, "report_type": "session"},
+        {"$set": session_report},
+        upsert=True,
+    )
+
+    if assessment.get("session_number") == 3:
+        completed = list(db.assessments.find(
+            {"cycle_id": assessment.get("cycle_id"), "user_id": get_jwt_identity(), "status": "completed"}
+        ).sort("session_number", 1))
+        if len(completed) == 3:
+            rows = []
+            for item in completed:
+                modalities = item.get("modality_scores", {})
+                rows.append({
+                    "session_number": item.get("session_number"),
+                    "risk_probability": item.get("risk_probability"),
+                    "risk_class": item.get("risk_class"),
+                    "cognitive_score": (item.get("cognitive_result") or {}).get("overall_cognitive_score"),
+                    "speech_score": modalities.get("speech"),
+                    "clinical_score": modalities.get("clinical"),
+                    "concern_score": item.get("concern_score"),
+                    "lifestyle_score": item.get("lifestyle_score"),
+                    "lifestyle_probability": item.get("lifestyle_probability"),
+                    "modality_scores": modalities,
+                })
+            final_data = {
+                "cycle_id": assessment.get("cycle_id"),
+                "sessions": rows,
+                "trends": {key: trend([row.get(key) for row in rows]) for key in ("risk_probability", "cognitive_score", "speech_score", "clinical_score", "concern_score")},
+                "recommendations": generate_longitudinal_recommendations(rows),
+            }
+            db.reports.update_one(
+                {"cycle_id": assessment.get("cycle_id"), "user_id": get_jwt_identity(), "report_type": "final"},
+                {"$set": {"report_data": final_data, "generated_at": now}},
+                upsert=True,
+            )
 
     result_doc = {**assessment, **update}
     result_doc["_id"] = str(result_doc["_id"])

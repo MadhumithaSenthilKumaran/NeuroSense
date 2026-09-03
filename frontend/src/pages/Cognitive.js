@@ -5,12 +5,31 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { MEMORY_WORDS } from '../utils/constants';
 export default function Cognitive() {
     const { id } = useParams();
+    const [memoryWords, setMemoryWords] = useState(MEMORY_WORDS);
+    const [story, setStory] = useState(null);
+    const [storyQuestions, setStoryQuestions] = useState([]);
+    const [storyQuestionIndex, setStoryQuestionIndex] = useState(0);
+    const [storyAnswer, setStoryAnswer] = useState('');
+    const [storyAnswers, setStoryAnswers] = useState([]);
+    const [sessionNumber, setSessionNumber] = useState(1);
     const [stage, setStage] = useState('memory-display');
     const [timeLeft, setTimeLeft] = useState(10);
     const [recalled, setRecalled] = useState([]);
     const [currentRecall, setCurrentRecall] = useState('');
-    const [reaction, setReaction] = useState('');
     const navigate = useNavigate();
+    useEffect(() => {
+        if (id)
+            api.get(`/cognitive/session/${id}`).then(({ data }) => {
+                if (Array.isArray(data.memory?.words) && data.memory.words.length === 6)
+                    setMemoryWords(data.memory.words);
+                if (data.story)
+                    setStory(data.story);
+                if (Array.isArray(data.story_questions))
+                    setStoryQuestions(data.story_questions);
+                if (data.session_number)
+                    setSessionNumber(data.session_number);
+            }).catch(() => { });
+    }, [id]);
     // Timer for memory display
     useEffect(() => {
         if (stage === 'memory-display' && timeLeft > 0) {
@@ -31,16 +50,33 @@ export default function Cognitive() {
         setRecalled(recalled.filter((_, i) => i !== index));
     };
     const handleMemoryTestComplete = () => {
-        setStage('reaction');
+        setStage(sessionNumber === 1 && story ? 'story' : storyQuestions.length ? 'story-questions' : 'complete');
+    };
+    const handleStoryQuestionSubmit = () => {
+        if (!storyQuestions.length || storyQuestionIndex >= storyQuestions.length) {
+            setStage('complete');
+            return;
+        }
+        const answer = storyAnswer.trim();
+        const updated = [...storyAnswers, answer];
+        setStoryAnswers(updated);
+        setStoryAnswer('');
+        const nextIndex = storyQuestionIndex + 1;
+        if (nextIndex < storyQuestions.length) {
+            setStoryQuestionIndex(nextIndex);
+            setStage('story-questions');
+            return;
+        }
+        setStage('complete');
     };
     const submit = async () => {
         const payload = {
             recalled_words: recalled,
-            reaction_times_ms: reaction.split(',').map(s => parseFloat(s.trim())).filter(Boolean),
             attention_answer: '',
             visual_memory: {},
             pattern_recognition: [],
             orientation: {},
+            story_answers: storyAnswers,
         };
         try {
             await api.post(`/cognitive/submit/${id}`, payload);
@@ -61,7 +97,7 @@ export default function Cognitive() {
                             gridTemplateColumns: 'repeat(2, 1fr)',
                             gap: '15px',
                             marginBottom: '20px'
-                        }, children: MEMORY_WORDS.map((word, idx) => (_jsx("div", { style: {
+                        }, children: memoryWords.map((word, idx) => (_jsx("div", { style: {
                                 padding: '20px',
                                 backgroundColor: '#4CAF50',
                                 color: 'white',
@@ -90,7 +126,7 @@ export default function Cognitive() {
                                     border: 'none',
                                     borderRadius: '4px',
                                     cursor: 'pointer'
-                                }, children: "Add Word" })] }), _jsxs("div", { children: [_jsxs("h4", { children: ["Recalled Words (", recalled.length, "/", MEMORY_WORDS.length, "):"] }), _jsx("div", { style: {
+                                }, children: "Add Word" })] }), _jsxs("div", { children: [_jsxs("h4", { children: ["Recalled Words (", recalled.length, "/", memoryWords.length, "):"] }), _jsx("div", { style: {
                                     display: 'flex',
                                     flexWrap: 'wrap',
                                     gap: '8px',
@@ -117,19 +153,35 @@ export default function Cognitive() {
                             borderRadius: '4px',
                             cursor: 'pointer',
                             fontSize: '16px'
-                        }, children: "Continue to Reaction Test" })] })), stage === 'reaction' && (_jsxs("div", { style: { marginBottom: '20px' }, children: [_jsx("h3", { children: "Reaction Time Test" }), _jsx("p", { children: "Enter your reaction times (in milliseconds), comma-separated:" }), _jsx("input", { value: reaction, onChange: e => setReaction(e.target.value), placeholder: "e.g., 250, 320, 280", style: {
-                            width: '100%',
-                            padding: '10px',
-                            marginBottom: '15px',
-                            borderRadius: '4px',
-                            border: '1px solid #ddd'
-                        } }), _jsx("button", { onClick: submit, style: {
+                        }, children: sessionNumber === 1 && story ? 'Continue to Story' : storyQuestions.length ? 'Continue to Story Questions' : 'Submit Cognitive Tests' })] })), stage === 'story' && sessionNumber === 1 && story && (_jsxs("div", { style: { padding: '20px', backgroundColor: '#f3e8ff', borderRadius: '8px', marginBottom: '20px' }, children: [_jsx("h3", { children: "Story Recall" }), _jsx("p", { style: { whiteSpace: 'pre-line', lineHeight: '1.8', fontSize: '16px' }, children: story.story }), _jsx("button", { onClick: () => setStage('complete'), style: {
                             padding: '10px 20px',
-                            backgroundColor: '#28a745',
+                            backgroundColor: '#7c3aed',
                             color: 'white',
                             border: 'none',
                             borderRadius: '4px',
                             cursor: 'pointer',
                             fontSize: '16px'
-                        }, children: "Submit Cognitive Tests" })] }))] }));
+                        }, children: "Submit Cognitive Tests" })] })), stage === 'story-questions' && sessionNumber > 1 && storyQuestions.length > 0 && (_jsxs("div", { style: { padding: '20px', backgroundColor: '#ecfeff', borderRadius: '8px', marginBottom: '20px' }, children: [_jsx("h3", { children: "Story Questions" }), _jsx("p", { style: { fontSize: '18px', marginBottom: '12px' }, children: storyQuestions[storyQuestionIndex].question }), _jsx("input", { value: storyAnswer, onChange: e => setStoryAnswer(e.target.value), placeholder: "Type your answer", style: {
+                            width: '100%',
+                            padding: '10px',
+                            marginBottom: '15px',
+                            borderRadius: '4px',
+                            border: '1px solid #ddd'
+                        } }), _jsx("button", { onClick: handleStoryQuestionSubmit, style: {
+                            padding: '10px 20px',
+                            backgroundColor: '#0ea5e9',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '16px'
+                        }, children: storyQuestionIndex === storyQuestions.length - 1 ? 'Finish Story Questions' : 'Next Question' })] })), stage === 'complete' && (_jsx("div", { style: { marginBottom: '20px' }, children: _jsx("button", { onClick: submit, style: {
+                        padding: '10px 20px',
+                        backgroundColor: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '16px'
+                    }, children: "Submit Cognitive Tests" }) }))] }));
 }

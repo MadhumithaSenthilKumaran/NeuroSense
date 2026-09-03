@@ -6,10 +6,12 @@ from bson import ObjectId
 from extensions import get_db
 from services.cognitive_scoring import (
     MEMORY_WORDS, ATTENTION_SEQUENCE,
-    score_memory_recall, score_reaction_time, score_attention,
+    score_memory_recall, score_attention,
     score_visual_memory, score_pattern_recognition, score_orientation,
+    score_story_recall,
     compute_cognitive_score,
 )
+
 
 cognitive_bp = Blueprint("cognitive", __name__)
 
@@ -24,14 +26,32 @@ def attention_sequence():
     return jsonify(sequence=ATTENTION_SEQUENCE, question="What number came after B?")
 
 
+@cognitive_bp.get("/session/<assessment_id>")
+@jwt_required()
+def cognitive_session(assessment_id):
+    db = get_db()
+    assessment = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
+    if not assessment:
+        return jsonify(error="Assessment not found"), 404
+    assigned = assessment.get("assigned_sets", {})
+    return jsonify(
+        story=assigned.get("story"),
+        story_questions=assigned.get("story_questions", []),
+        memory=assigned.get("memory"),
+        session_number=assessment.get("session_number", 1),
+        tests=assessment.get("tests", []),
+    )
+
+
+
 @cognitive_bp.post("/submit/<assessment_id>")
 @jwt_required()
 def submit_cognitive(assessment_id):
     """
     Body:
     {
-      "recalled_words": [...],
-      "reaction_times_ms": [...],
+    "recalled_words": [...],
+    "story_answers": [...],
       "attention_answer": "7",
       "visual_memory": {"selected": [...], "target": [...]},
       "pattern_recognition": [{"selected":.., "correct":..}, ...],
@@ -40,8 +60,14 @@ def submit_cognitive(assessment_id):
     """
     data = request.get_json(force=True) or {}
 
-    memory_result = score_memory_recall(data.get("recalled_words", []))
-    reaction_result = score_reaction_time(data.get("reaction_times_ms", []))
+    db = get_db()
+    assessment = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
+    if not assessment:
+        return jsonify(error="Assessment not found"), 404
+    memory_words = assessment.get("assigned_sets", {}).get("memory", {}).get("words") or MEMORY_WORDS
+    memory_result = score_memory_recall(data.get("recalled_words", []), memory_words)
+    story_questions = assessment.get("assigned_sets", {}).get("story_questions", [])
+    story_result = score_story_recall(data.get("story_answers", []), story_questions)
     attention_result = score_attention(data.get("attention_answer", ""))
 
     vm = data.get("visual_memory", {})
@@ -55,7 +81,7 @@ def submit_cognitive(assessment_id):
 
     sub_scores = {
         "memory_recall": memory_result["score"],
-        "reaction_time": reaction_result["score"],
+        "story_recall": story_result["score"],
         "attention": attention_result["score"],
         "visual_memory": visual_memory_result["score"],
         "pattern_recognition": pattern_result["score"],
@@ -66,8 +92,11 @@ def submit_cognitive(assessment_id):
     cognitive_result = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
+        "story": assessment.get("assigned_sets", {}).get("story"),
+        "story_questions": story_questions,
+        "story_answers": data.get("story_answers", []),
+        "story_recall": story_result,
         "memory_recall": memory_result,
-        "reaction_time": reaction_result,
         "attention": attention_result,
         "visual_memory": visual_memory_result,
         "pattern_recognition": pattern_result,
@@ -76,7 +105,6 @@ def submit_cognitive(assessment_id):
         "created_at": now,
     }
 
-    db = get_db()
     result = db.cognitive_tests.insert_one(cognitive_result)
     db.assessments.update_one(
         {"_id": ObjectId(assessment_id)},

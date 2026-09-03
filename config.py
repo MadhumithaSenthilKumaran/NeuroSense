@@ -19,10 +19,20 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     # --- Database ---
-    MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/neurosense")
+    DEFAULT_MONGO_URI = "mongodb://localhost:27017/neurosense"
+    MONGO_URI = os.environ.get("MONGO_URI") or DEFAULT_MONGO_URI
 
     # --- CORS ---
-    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    CORS_ORIGINS = list(dict.fromkeys([
+        origin.strip()
+        for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+        if origin.strip()
+    ] + [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ]))
 
     # --- File uploads ---
     UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", "/tmp/neurosense_uploads")
@@ -46,8 +56,13 @@ class Config:
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
     SMTP_FROM = os.environ.get("SMTP_FROM", "no-reply@neurosense.app")
 
+    # --- Optional RAG + LLM recommendation refinement ---
+    LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+    LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+    LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+
     # --- Feature flags ---
     # Real transcription/embedding models are heavy. Default to lightweight
     # mode so the app runs out-of-the-box on a laptop; flip to False once
     # whisper / sentence-transformers are installed and warmed up.
-    LIGHTWEIGHT_MODE = os.environ.get("LIGHTWEIGHT_MODE", "true").lower() == "true"
+    LIGHTWEIGHT_MODE = os.environ.get("LIGHTWEIGHT_MODE", "false").lower() == "true"

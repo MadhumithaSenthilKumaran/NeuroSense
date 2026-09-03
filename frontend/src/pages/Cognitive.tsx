@@ -1,16 +1,31 @@
 import React, { useEffect, useState } from 'react'
 import api from '../api'
 import { useParams, useNavigate } from 'react-router-dom'
-import { MEMORY_WORDS, ATTENTION_SEQUENCE } from '../utils/constants'
+import { MEMORY_WORDS } from '../utils/constants'
 
 export default function Cognitive(){
   const { id } = useParams<{id:string}>()
-  const [stage, setStage] = useState<'memory-display' | 'memory-test' | 'reaction' | 'complete'>('memory-display')
+  const [memoryWords, setMemoryWords] = useState<string[]>(MEMORY_WORDS)
+  const [story, setStory] = useState<any>(null)
+  const [storyQuestions, setStoryQuestions] = useState<any[]>([])
+  const [storyQuestionIndex, setStoryQuestionIndex] = useState(0)
+  const [storyAnswer, setStoryAnswer] = useState('')
+  const [storyAnswers, setStoryAnswers] = useState<string[]>([])
+  const [sessionNumber, setSessionNumber] = useState(1)
+  const [stage, setStage] = useState<'memory-display' | 'memory-test' | 'story' | 'story-questions' | 'complete'>('memory-display')
   const [timeLeft, setTimeLeft] = useState(10)
   const [recalled, setRecalled] = useState<string[]>([])
   const [currentRecall, setCurrentRecall] = useState('')
-  const [reaction, setReaction] = useState<string>('')
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (id) api.get(`/cognitive/session/${id}`).then(({ data }) => {
+      if (Array.isArray(data.memory?.words) && data.memory.words.length === 6) setMemoryWords(data.memory.words)
+      if (data.story) setStory(data.story)
+      if (Array.isArray(data.story_questions)) setStoryQuestions(data.story_questions)
+      if (data.session_number) setSessionNumber(data.session_number)
+    }).catch(() => {})
+  }, [id])
 
   // Timer for memory display
   useEffect(() => {
@@ -34,17 +49,38 @@ export default function Cognitive(){
   }
 
   const handleMemoryTestComplete = () => {
-    setStage('reaction')
+    setStage(sessionNumber === 1 && story ? 'story' : storyQuestions.length ? 'story-questions' : 'complete')
+  }
+
+  const handleStoryQuestionSubmit = () => {
+    if (!storyQuestions.length || storyQuestionIndex >= storyQuestions.length) {
+      setStage('complete')
+      return
+    }
+
+    const answer = storyAnswer.trim()
+    const updated = [...storyAnswers, answer]
+    setStoryAnswers(updated)
+    setStoryAnswer('')
+
+    const nextIndex = storyQuestionIndex + 1
+    if (nextIndex < storyQuestions.length) {
+      setStoryQuestionIndex(nextIndex)
+      setStage('story-questions')
+      return
+    }
+
+    setStage('complete')
   }
 
   const submit = async ()=>{
     const payload = {
       recalled_words: recalled,
-      reaction_times_ms: reaction.split(',').map(s=>parseFloat(s.trim())).filter(Boolean),
       attention_answer: '',
       visual_memory: {},
       pattern_recognition: [],
       orientation: {},
+      story_answers: storyAnswers,
     }
     try{
       await api.post(`/cognitive/submit/${id}`, payload)
@@ -76,7 +112,7 @@ export default function Cognitive(){
             gap: '15px',
             marginBottom: '20px'
           }}>
-            {MEMORY_WORDS.map((word, idx) => (
+            {memoryWords.map((word, idx) => (
               <div 
                 key={idx}
                 style={{
@@ -142,7 +178,7 @@ export default function Cognitive(){
           </div>
 
           <div>
-            <h4>Recalled Words ({recalled.length}/{MEMORY_WORDS.length}):</h4>
+            <h4>Recalled Words ({recalled.length}/{memoryWords.length}):</h4>
             <div style={{ 
               display: 'flex', 
               flexWrap: 'wrap', 
@@ -192,19 +228,40 @@ export default function Cognitive(){
               fontSize: '16px'
             }}
           >
-            Continue to Reaction Test
+            {sessionNumber === 1 && story ? 'Continue to Story' : storyQuestions.length ? 'Continue to Story Questions' : 'Submit Cognitive Tests'}
           </button>
         </div>
       )}
 
-      {stage === 'reaction' && (
-        <div style={{ marginBottom: '20px' }}>
-          <h3>Reaction Time Test</h3>
-          <p>Enter your reaction times (in milliseconds), comma-separated:</p>
-          <input 
-            value={reaction} 
-            onChange={e=>setReaction(e.target.value)}
-            placeholder="e.g., 250, 320, 280"
+      {stage === 'story' && sessionNumber === 1 && story && (
+        <div style={{ padding: '20px', backgroundColor: '#f3e8ff', borderRadius: '8px', marginBottom: '20px' }}>
+          <h3>Story Recall</h3>
+          <p style={{ whiteSpace: 'pre-line', lineHeight: '1.8', fontSize: '16px' }}>{story.story}</p>
+          <button
+            onClick={() => setStage('complete')}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#7c3aed',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            Submit Cognitive Tests
+          </button>
+        </div>
+      )}
+
+      {stage === 'story-questions' && sessionNumber > 1 && storyQuestions.length > 0 && (
+        <div style={{ padding: '20px', backgroundColor: '#ecfeff', borderRadius: '8px', marginBottom: '20px' }}>
+          <h3>Story Questions</h3>
+          <p style={{ fontSize: '18px', marginBottom: '12px' }}>{storyQuestions[storyQuestionIndex].question}</p>
+          <input
+            value={storyAnswer}
+            onChange={e => setStoryAnswer(e.target.value)}
+            placeholder="Type your answer"
             style={{
               width: '100%',
               padding: '10px',
@@ -213,6 +270,24 @@ export default function Cognitive(){
               border: '1px solid #ddd'
             }}
           />
+          <button
+            onClick={handleStoryQuestionSubmit}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#0ea5e9',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            {storyQuestionIndex === storyQuestions.length - 1 ? 'Finish Story Questions' : 'Next Question'}
+          </button>
+        </div>
+      )}
+      {stage === 'complete' && (
+        <div style={{ marginBottom: '20px' }}>
           <button 
             onClick={submit}
             style={{

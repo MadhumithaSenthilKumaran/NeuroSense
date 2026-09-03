@@ -16,11 +16,15 @@ export default function SpeechUpload() {
     const [busy, setBusy] = useState(false);
     useEffect(() => {
         api.get('/speech/tasks').then(({ data }) => setTasks(data.tasks)).catch(() => setTasks([
-            { id: 'reading', title: 'Read this paragraph', prompt: 'Yesterday I went to the market with my family. We bought fruits, vegetables, and milk.' },
-            { id: 'picture', title: 'Describe the picture', prompt: 'Describe what is happening in the picture shown on screen.' },
-            { id: 'routine', title: 'Talk about your day', prompt: 'Talk for about one minute about your daily routine.' },
+            { id: 'reading', title: 'Reading statement', prompt: 'Please read the paragraph aloud at a comfortable pace: Yesterday I went to the market with my family. We bought fruits, vegetables, and milk.' },
         ]));
-    }, []);
+        if (id)
+            api.get(`/speech/session/${id}`).then(({ data }) => {
+                if (!data.speech_set?.paragraph)
+                    return;
+                setTasks(current => current.map(item => item.id === 'reading' ? { ...item, prompt: data.speech_set.paragraph } : item));
+            }).catch(() => { });
+    }, [id]);
     const selectedTask = tasks.find(item => item.id === task);
     const handleFileChange = (selected) => {
         setFile(selected);

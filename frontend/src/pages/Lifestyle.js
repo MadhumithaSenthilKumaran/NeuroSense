@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../api';
 import { useParams, useNavigate } from 'react-router-dom';
 export default function Lifestyle() {
@@ -87,39 +87,55 @@ export default function Lifestyle() {
                             cursor: 'pointer',
                             fontSize: '16px',
                             marginTop: '20px'
-                        }, children: "Continue to Concerns Assessment" })] })), stage === 'concerns' && (_jsxs("div", { children: [_jsx("h3", { children: "Self-Reported Cognitive Concerns" }), _jsx("p", { style: { color: '#666', marginBottom: '20px' }, children: "Rate how often you experience each of the following:" }), _jsxs("div", { style: {
-                            display: 'grid',
-                            gridTemplateColumns: '1fr auto',
-                            gap: '20px',
-                            marginBottom: '20px'
-                        }, children: [_jsx("div", { children: concernQuestions.map((q, idx) => (_jsx("div", { style: {
+                        }, children: "Continue to Concerns Assessment" })] })), stage === 'concerns' && (_jsxs("div", { children: [_jsx("h3", { children: "Self-Reported Cognitive Concerns" }), _jsx("p", { style: { color: '#666', marginBottom: '20px' }, children: "Rate how often you experience each of the following:" }), _jsx("div", { style: { overflowX: 'auto', marginBottom: '20px' }, children: _jsxs("div", { style: {
+                                display: 'grid',
+                                gridTemplateColumns: `250px repeat(${concernScale.length}, 85px)`,
+                                gap: '0',
+                                minWidth: '100%'
+                            }, children: [_jsx("div", { style: {
                                         padding: '12px',
-                                        backgroundColor: '#f9f9f9',
-                                        borderBottom: '1px solid #eee'
-                                    }, children: _jsxs("label", { style: { display: 'block', marginBottom: '8px', fontWeight: '500' }, children: [idx + 1, ". ", q.text] }) }, q.id))) }), _jsxs("div", { style: { minWidth: '300px' }, children: [_jsx("div", { style: {
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))',
-                                            gap: '8px',
-                                            marginBottom: '20px'
-                                        }, children: concernScale.map((scale) => (_jsx("div", { style: {
-                                                textAlign: 'center',
-                                                fontSize: '12px',
-                                                fontWeight: 'bold',
-                                                color: '#007bff'
-                                            }, children: scale }, scale))) }), concernQuestions.map((q) => (_jsx("div", { style: {
-                                            padding: '12px',
-                                            backgroundColor: '#f9f9f9',
-                                            borderBottom: '1px solid #eee',
-                                            display: 'grid',
-                                            gridTemplateColumns: 'repeat(auto-fit, minmax(70px, 1fr))',
-                                            gap: '8px',
-                                            alignItems: 'center'
-                                        }, children: concernScale.map((scale) => (_jsx("label", { style: {
+                                        backgroundColor: '#007bff',
+                                        color: 'white',
+                                        fontWeight: 'bold',
+                                        borderBottom: '2px solid #0d47a1',
+                                        minHeight: '50px',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }, children: "Concern" }), concernScale.map((scale) => (_jsx("div", { style: {
+                                        padding: '12px',
+                                        backgroundColor: '#007bff',
+                                        color: 'white',
+                                        fontWeight: 'bold',
+                                        textAlign: 'center',
+                                        fontSize: '12px',
+                                        borderBottom: '2px solid #0d47a1',
+                                        minHeight: '50px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center'
+                                    }, children: scale }, `header-${scale}`))), concernQuestions.map((q, qIdx) => (_jsxs(React.Fragment, { children: [_jsxs("div", { style: {
+                                                padding: '12px',
+                                                backgroundColor: qIdx % 2 === 0 ? '#f9f9f9' : '#fff',
+                                                borderBottom: '1px solid #eee',
+                                                fontWeight: '500',
+                                                fontSize: '13px',
+                                                display: 'flex',
+                                                alignItems: 'center'
+                                            }, children: [qIdx + 1, ". ", q.text] }), concernScale.map((scale) => (_jsx("div", { style: {
+                                                padding: '12px',
+                                                backgroundColor: qIdx % 2 === 0 ? '#f9f9f9' : '#fff',
+                                                borderBottom: '1px solid #eee',
                                                 display: 'flex',
                                                 justifyContent: 'center',
                                                 alignItems: 'center',
-                                                cursor: 'pointer'
-                                            }, children: _jsx("input", { type: "radio", name: q.id, value: scale, checked: concernAnswers[q.id] === scale, onChange: () => setConcernAnswers({ ...concernAnswers, [q.id]: scale }), style: { cursor: 'pointer' } }) }, scale))) }, q.id)))] })] }), _jsxs("div", { style: { display: 'flex', gap: '10px', marginTop: '20px' }, children: [_jsx("button", { onClick: () => setStage('lifestyle'), style: {
+                                                minHeight: '50px'
+                                            }, children: _jsx("label", { style: {
+                                                    display: 'flex',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    cursor: 'pointer',
+                                                    width: '100%'
+                                                }, children: _jsx("input", { type: "radio", name: q.id, value: scale, checked: concernAnswers[q.id] === scale, onChange: () => setConcernAnswers({ ...concernAnswers, [q.id]: scale }), style: { cursor: 'pointer', width: '18px', height: '18px' } }) }) }, `${q.id}-${scale}`)))] }, q.id)))] }) }), _jsxs("div", { style: { display: 'flex', gap: '10px', marginTop: '20px' }, children: [_jsx("button", { onClick: () => setStage('lifestyle'), style: {
                                     padding: '12px 30px',
                                     backgroundColor: '#6c757d',
                                     color: 'white',

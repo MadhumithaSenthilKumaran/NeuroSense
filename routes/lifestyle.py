@@ -33,9 +33,14 @@ def submit_lifestyle(assessment_id):
     concern_result = score_concern(concern_answers)
 
     db = get_db()
+    assessment = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
+    if not assessment:
+        return jsonify(error="Assessment not found"), 404
     doc = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
+        "cycle_id": assessment.get("cycle_id"),
+        "session_number": assessment.get("session_number", 1),
         "answers": answers,
         "concern_answers": concern_answers,
         **lifestyle_result,

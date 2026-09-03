@@ -12,7 +12,7 @@ from transcription import transcribe
 speech_bp = Blueprint("speech", __name__)
 
 ALLOWED_EXTENSIONS = {"wav", "mp3", "m4a", "webm", "ogg"}
-TASKS = {"reading", "picture", "routine"}
+TASKS = {"reading"}
 
 
 def _allowed(filename):
@@ -60,6 +60,9 @@ def upload_speech(assessment_id, task):
     doc = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
+        "cycle_id": assessment.get("cycle_id"),
+        "session_number": assessment.get("session_number", 1),
+        "speech_set_id": assessment.get("assigned_sets", {}).get("speech", {}).get("id"),
         "task": task,
         "audio_path": save_path,
         "transcript": transcript,
@@ -96,26 +99,22 @@ def get_waveform(speech_feature_id):
 
 @speech_bp.get("/tasks")
 def get_tasks():
+    reading_prompt = "Please read the paragraph assigned to your session aloud at a comfortable pace."
     return jsonify(tasks=[
         {
             "id": "reading",
-            "title": "Read this paragraph",
-            "prompt": (
-                "Yesterday I went to the market with my family. We bought fruits, "
-                "vegetables, and milk. Later we visited a nearby park and spent "
-                "some time together."
-            ),
-        },
-        {
-            "id": "picture",
-            "title": "Describe the picture",
-            "prompt": "Describe what is happening in the picture shown on screen.",
-            "image_url": "/assets/cookie-theft-scene.png",
-        },
-        {
-            "id": "routine",
-            "title": "Talk about your day",
-            "prompt": "Talk for about one minute about your daily routine.",
-            "duration_hint_s": 60,
+            "title": "Reading statement",
+            "prompt": reading_prompt,
         },
     ])
+
+
+@speech_bp.get("/session/<assessment_id>")
+@jwt_required()
+def get_session_speech(assessment_id):
+    db = get_db()
+    assessment = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
+    if not assessment:
+        return jsonify(error="Assessment not found"), 404
+    assigned = assessment.get("assigned_sets", {}).get("speech", {})
+    return jsonify(speech_set=assigned, analyze=["pitch_hz", "pause_duration_s", "pause_rate", "speech_rate_wpm"])
