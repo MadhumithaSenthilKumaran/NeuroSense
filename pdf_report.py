@@ -6,20 +6,33 @@ disclaimer, and a QR code (linking back to the online report/verification
 page).
 """
 
-import io
 import os
-import qrcode
+from datetime import datetime, timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
-from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak,
-)
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 TEAL = colors.HexColor("#0F766E")
 BLUE = colors.HexColor("#1D4ED8")
 LIGHT_BG = colors.HexColor("#F0FDFA")
+
+
+def _display_timestamp(value):
+    if not value:
+        return "-"
+    if hasattr(value, "tzinfo"):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone().strftime("%B %d, %Y at %I:%M %p")
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return _display_timestamp(parsed)
+        except ValueError:
+            pass
+    return str(value)
 
 
 def _styles():
@@ -32,26 +45,16 @@ def _styles():
     return styles
 
 
-def _qr_image(payload: str, size_mm=30):
-    qr = qrcode.QRCode(box_size=6, border=2)
-    qr.add_data(payload)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="#0F766E", back_color="white")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    buf.seek(0)
-    return Image(buf, width=size_mm * mm, height=size_mm * mm)
-
-
 def build_report_pdf(output_path: str, user: dict, assessment: dict,
                       lifestyle: dict, cognitive: dict, speech_docs: list,
-                      verification_url: str):
+                      verification_url: str, final_data: dict = None):
     styles = _styles()
     doc = SimpleDocTemplate(output_path, pagesize=A4, topMargin=20 * mm, bottomMargin=18 * mm)
     story = []
 
     story.append(Paragraph("NeuroSense", styles["NSTitle"]))
-    story.append(Paragraph("Preliminary Alzheimer's Risk Screening Report", styles["Heading3"]))
+    title = "Three-Session NeuroSense Summary" if final_data else "Preliminary Alzheimer's Risk Screening Report"
+    story.append(Paragraph(title, styles["Heading3"]))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
         "NeuroSense is intended only for preliminary Alzheimer's risk screening and awareness. "
@@ -66,7 +69,8 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
         ["Age", str(user.get("age", "-"))],
         ["Gender", str(user.get("gender", "-"))],
         ["Education", str(user.get("education", "-"))],
-        ["Assessment Date", str(assessment.get("completed_at", "-"))[:19].replace("T", " ")],
+        ["Assessment Date", _display_timestamp(assessment.get("completed_at"))],
+        ["Session", assessment.get("session_label", "Final summary" if final_data else "-" )],
     ]
     t = Table(patient_rows, colWidths=[45 * mm, 100 * mm])
     t.setStyle(TableStyle([
@@ -77,6 +81,31 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
     ]))
     story.append(Paragraph("Patient Information", styles["NSHeading"]))
     story.append(t)
+
+    if final_data:
+        story.append(Paragraph("Session Timeline", styles["NSHeading"]))
+        timeline = [["Session", "Scheduled date", "Completed"]]
+        for item in final_data.get("sessions", []):
+            timeline.append([
+                item.get("session_label", f"Session {item.get('session_number', '-') }"),
+                item.get("scheduled_for", "-"),
+                _display_timestamp(item.get("completed_at")),
+            ])
+        timeline_table = Table(timeline, colWidths=[35 * mm, 42 * mm, 68 * mm])
+        timeline_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), TEAL),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ]))
+        story.append(timeline_table)
+        longitudinal = final_data.get("recommendations", {})
+        story.append(Paragraph("Longitudinal Explainable Summary", styles["NSHeading"]))
+        story.append(Paragraph(longitudinal.get("summary", "-"), styles["NSBody"]))
+        story.append(Paragraph(longitudinal.get("explanation", "-"), styles["NSBody"]))
+        story.append(Paragraph("Lifestyle routine", styles["NSHeading"]))
+        for item in longitudinal.get("lifestyle_routine", []):
+            story.append(Paragraph(f"&bull; {item}", styles["NSBody"]))
 
     # Risk score
     story.append(Paragraph("Overall Risk Assessment", styles["NSHeading"]))
@@ -176,6 +205,11 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
 
     # Recommendations
     story.append(Paragraph("Personalized Recommendations", styles["NSHeading"]))
+    action_plan = recs.get("personalized_action_plan", [])
+    if action_plan:
+        story.append(Paragraph("<b>Personalized action plan:</b>", styles["NSBody"]))
+        for item in action_plan:
+            story.append(Paragraph(f"&bull; {item}", styles["NSBody"]))
     for label, key in [
         ("Diet", "diet_suggestions"), ("Exercise", "exercise_recommendations"),
         ("Sleep", "sleep_recommendations"), ("Memory", "memory_improvement_tips"),
@@ -196,10 +230,6 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
         ),
         styles["NSDisclaimer"],
     ))
-
-    story.append(Spacer(1, 14))
-    story.append(_qr_image(verification_url))
-    story.append(Paragraph("Scan to view this report online", styles["NSBody"]))
 
     doc.build(story)
     return output_path

@@ -29,3 +29,6 @@ except Exception:
 
     def compute_cognitive_score(sub_scores):
         return 0.0
+
+    def score_game_results(results):
+        return {"score": 0.0, "pair_score": 0.0, "number_score": 0.0, "camera_score": 0.0}

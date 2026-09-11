@@ -35,41 +35,45 @@ export default function Finalize(){
       <h2 className="text-2xl font-medium">Finalize Assessment</h2>
       <p>When you finalize, the system will fuse available modalities and produce recommendations.</p>
       <div>
-        <button className="px-4 py-2 bg-indigo-600 text-white rounded" onClick={run} disabled={loading}>{loading? 'Processing...' : 'Finalize'}</button>
+        <button className="form-submit" onClick={run} disabled={loading}>{loading? 'Processing...' : 'Finalize'}</button>
       </div>
 
       {error && <div className="text-red-600">{error}</div>}
 
       {result && (
-        <div className="p-4 border rounded">
-          <div className="mb-2">Risk: <strong>{result.risk_class}</strong> ({result.risk_probability})</div>
-          <div className="mb-2">Used modalities: {result.used_modalities?.join(', ')}</div>
-           <div className="mb-2"><strong>Lifestyle score:</strong> {result.lifestyle_score ?? 'Not available'} / 100</div>
-           <div className="mb-2"><strong>Lifestyle risk probability:</strong> {formatProbability(result.lifestyle_probability)}</div>
-           <div className="mb-2"><strong>Clinical concern score:</strong> {result.clinical_concern_score ?? 'Not available'} / 100</div>
-           <div className="mb-2"><strong>Cognitive score:</strong> {result.cognitive_result?.overall_cognitive_score ?? 'Not available'} / 100</div>
-           <div className="mb-2"><strong>Speech risk probability:</strong> {formatProbability(result.modality_scores?.speech)}</div>
-          <div className="mb-2"><strong>Next scheduled session:</strong> {result.next_session_date || 'This is the final session'}</div>
+        <div className="finalize-result">
+          <div className="result-summary">
+            <div><span>Overall risk</span><strong>{result.risk_class || 'Not available'}</strong><small>{formatProbability(result.risk_probability)}</small></div>
+            <div><span>Modalities used</span><strong>{result.used_modalities?.length || 0}</strong><small>{result.used_modalities?.join(', ') || 'None recorded'}</small></div>
+            <div><span>Next session date</span><strong>{result.next_session_date || 'Final session'}</strong><small>{result.next_session_date ? 'Available on this date' : 'Final session complete'}</small></div>
+          </div>
+          <div className="score-visuals">
+            <ScoreBars result={result} />
+            <ModalityChart scores={result.modality_scores} />
+          </div>
           {result.next_session_date && (
-            <button className="px-4 py-2 bg-emerald-600 text-white rounded" onClick={startNextSession} disabled={nextLoading}>
+            <button className="form-submit next-session" onClick={startNextSession} disabled={nextLoading}>
               {nextLoading ? 'Checking date...' : 'Start next session'}
             </button>
           )}
-           <div className="mb-2">Integrated modality scores:</div>
-          <pre className="bg-gray-100 p-2 rounded">{JSON.stringify(result.modality_scores, null, 2)}</pre>
           {result.next_assessment_suggestion && (
-            <div className="mt-3 p-3 rounded bg-amber-50 border border-amber-200 text-amber-900">
-              <strong>Next assessment suggestion:</strong> {result.next_assessment_suggestion}
+            <div className="assessment-suggestion">
+              <strong>Next assessment suggestion</strong><span>{result.next_assessment_suggestion}</span>
             </div>
           )}
-          <div className="mt-2">
-            <h4 className="font-medium">Recommendations</h4>
-            <div className="mt-1">
-              {result.recommendations?.summary ? (
-                <div>{result.recommendations.summary}</div>
-              ) : null}
-              {result.recommendations?.explanation && <div className="mt-2 text-sm text-gray-700">{result.recommendations.explanation}</div>}
+          <div className="recommendation-panel">
+            <h3>Recommended focus</h3>
+            <p>{result.recommendations?.summary || 'Use these focus areas to guide your next steps.'}</p>
+            <div className="recommendation-grid">
+              <RecommendationList title="Personalized action plan" items={result.recommendations?.personalized_action_plan} />
+              <RecommendationList title="Recommended exercises" items={result.recommendations?.exercise_recommendations} />
+              <RecommendationList title="Sleep" items={result.recommendations?.sleep_recommendations} />
+              <RecommendationList title="Diet" items={result.recommendations?.diet_suggestions} />
+              <RecommendationList title="Memory strategies" items={result.recommendations?.memory_improvement_tips} />
+              <RecommendationList title="Stress reduction" items={result.recommendations?.stress_reduction_recommendations} />
+              <RecommendationList title="Clinical follow-up" items={result.recommendations?.medical_consultation_guidance} />
             </div>
+            {result.recommendations?.disclaimer && <div className="recommendation-disclaimer">{result.recommendations.disclaimer}</div>}
           </div>
         </div>
       )}
@@ -77,6 +81,33 @@ export default function Finalize(){
   )
 }
 
+function RecommendationList({ title, items }: { title: string; items?: string[] }) {
+  if (!items?.length) return null
+  return <div className="recommendation-item"><strong>{title}</strong><span>{items[0]}</span><small>{items.length} suggestion{items.length === 1 ? '' : 's'}</small></div>
+}
+
 function formatProbability(value: number | null | undefined) {
   return value == null ? 'Not available' : `${Math.round(Number(value) * 100)}%`
+}
+
+function formatTimestamp(value: string, includeTime = false) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', ...(includeTime ? { timeStyle: 'short' } : {}) }).format(date)
+}
+
+function ScoreBars({ result }: { result: any }) {
+  const scores = [
+    ['Lifestyle', result.lifestyle_score],
+    ['Clinical concern', result.clinical_concern_score],
+    ['Cognitive', result.cognitive_result?.overall_cognitive_score],
+    ['Speech risk', result.modality_scores?.speech == null ? null : Number(result.modality_scores.speech) * 100],
+  ]
+  return <section className="visual-card"><div className="visual-heading"><h3>Assessment profile</h3><span>0 to 100</span></div>{scores.map(([label, value]) => <div className="score-bar" key={label as string}><div><span>{label}</span><strong>{value == null ? 'N/A' : `${Math.round(Number(value))}%`}</strong></div><div className="bar-track"><i style={{ width: `${Math.min(100, Math.max(0, Number(value) || 0))}%` }} /></div></div>)}</section>
+}
+
+function ModalityChart({ scores }: { scores?: Record<string, number> }) {
+  const entries = Object.entries(scores || {}).filter(([, value]) => value != null)
+  if (!entries.length) return null
+  return <section className="visual-card modality-card"><div className="visual-heading"><h3>Modality signals</h3><span>Risk probability</span></div><div className="modality-chart">{entries.map(([label, value]) => <div className="modality-column" key={label}><div className="column-value">{Math.round(Number(value) * 100)}%</div><div className="column-track"><i style={{ height: `${Math.min(100, Math.max(0, Number(value) * 100))}%` }} /></div><span>{label}</span></div>)}</div></section>
 }

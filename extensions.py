@@ -23,13 +23,10 @@ def _with_database(uri, database="neurosense"):
 def init_db(app):
     global _client, _db
 
-    candidate_uris = []
     configured = app.config.get("MONGO_URI")
-    if configured:
-        candidate_uris.append(configured)
-    local_uri = "mongodb://localhost:27017/neurosense"
-    if local_uri not in candidate_uris:
-        candidate_uris.append(local_uri)
+    if not configured:
+        raise RuntimeError("MONGO_URI must be configured; refusing to use a local MongoDB fallback")
+    candidate_uris = [configured]
 
     last_error = None
     for raw_uri in candidate_uris:

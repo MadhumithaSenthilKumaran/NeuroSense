@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify
+import os
+import uuid
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
 
@@ -10,6 +12,7 @@ from services.linguistic_features import extract_linguistic_features
 from services.rag import generate_recommendations, generate_longitudinal_recommendations
 from services.session_assessment import STORY_BANK, assign_sets, build_cycle_schedule, trend
 from services.lifestyle_scoring import score_lifestyle
+from services.pdf_report import build_report_pdf
 
 assessment_bp = Blueprint("assessment", __name__)
 
@@ -46,8 +49,8 @@ def start_assessment(cycle_id_override=None, session_number_override=None):
         })
         cycle = {"schedule": cycle_schedule, "started_at": started_at}
 
-    schedule = next(item for item in build_cycle_schedule(started_at) if item["session_number"] == session_number)
-    if cycle_id and session_number > 1 and now.date().isoformat() < schedule["scheduled_for"]:
+    schedule = next(item for item in cycle.get("schedule", build_cycle_schedule(started_at)) if item["session_number"] == session_number)
+    if cycle_id and session_number > 1 and now.astimezone().date().isoformat() < schedule["scheduled_for"]:
         return jsonify(error=f"Session {session_number} is available on {schedule['scheduled_for']}"), 403
 
     prior = list(db.assessments.find({"user_id": user_id}, {"cycle_id": 1, "session_number": 1, "assigned_sets": 1}).sort("session_number", 1))
@@ -194,7 +197,7 @@ def finalize_assessment(assessment_id):
     )
     schedule_message = (
         f"Your next assessment is scheduled for {next_schedule['scheduled_for']}. "
-        "Please attend on that scheduled date."
+        "Please complete it on that date. No appointment time is required."
         if next_schedule else "This is the final assessment in the one-week cycle."
     )
     update = {
@@ -213,6 +216,7 @@ def finalize_assessment(assessment_id):
         "recommendations": recommendations,
         "next_assessment_suggestion": schedule_message,
         "next_session_date": next_schedule["scheduled_for"] if next_schedule else None,
+        "session_label": f"Session {assessment.get('session_number', 1)}",
         "cycle_schedule": cycle_schedule,
     }
     db.assessments.update_one({"_id": ObjectId(assessment_id)}, {"$set": update})
@@ -257,8 +261,10 @@ def finalize_assessment(assessment_id):
                     "lifestyle_probability": item.get("lifestyle_probability"),
                     "modality_scores": modalities,
                 })
-            final_data = {
+                final_data = {
                 "cycle_id": assessment.get("cycle_id"),
+                    "report_type": "final",
+                    "session_count": len(rows),
                 "sessions": rows,
                 "trends": {key: trend([row.get(key) for row in rows]) for key in ("risk_probability", "cognitive_score", "speech_score", "clinical_score", "concern_score")},
                 "recommendations": generate_longitudinal_recommendations(rows),
@@ -267,6 +273,18 @@ def finalize_assessment(assessment_id):
                 {"cycle_id": assessment.get("cycle_id"), "user_id": get_jwt_identity(), "report_type": "final"},
                 {"$set": {"report_data": final_data, "generated_at": now}},
                 upsert=True,
+            )
+            user = db.users.find_one({"_id": ObjectId(get_jwt_identity())}) or {}
+            reports_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "reports")
+            os.makedirs(reports_dir, exist_ok=True)
+            output_path = os.path.join(reports_dir, f"neurosense_final_{assessment.get('cycle_id')}_{uuid.uuid4().hex[:8]}.pdf")
+            build_report_pdf(
+                output_path, user, {"report_type": "final", "completed_at": now},
+                {}, {}, [], f"https://neurosense.app/verify/cycle/{assessment.get('cycle_id')}", final_data,
+            )
+            db.reports.update_one(
+                {"cycle_id": assessment.get("cycle_id"), "user_id": get_jwt_identity(), "report_type": "final"},
+                {"$set": {"pdf_path": output_path}},
             )
 
     result_doc = {**assessment, **update}

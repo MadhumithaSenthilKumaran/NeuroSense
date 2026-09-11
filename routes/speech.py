@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -13,6 +14,13 @@ speech_bp = Blueprint("speech", __name__)
 
 ALLOWED_EXTENSIONS = {"wav", "mp3", "m4a", "webm", "ogg"}
 TASKS = {"reading"}
+
+
+def _content_match(transcript, expected):
+    expected_words = {word for word in re.findall(r"[a-z]+", (expected or '').lower()) if len(word) > 3}
+    transcript_words = set(re.findall(r"[a-z]+", (transcript or '').lower()))
+    matched = expected_words & transcript_words
+    return {"score": round(len(matched) / len(expected_words) * 100, 1) if expected_words else None, "matched_words": sorted(matched), "expected_word_count": len(expected_words)}
 
 
 def _allowed(filename):
@@ -57,12 +65,14 @@ def upload_speech(assessment_id, task):
         current_app.logger.exception("Speech feature extraction failed")
         return jsonify(error=f"Could not process audio: {e}"), 422
 
+    assigned_speech = assessment.get("assigned_sets", {}).get("speech", {})
     doc = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
         "cycle_id": assessment.get("cycle_id"),
         "session_number": assessment.get("session_number", 1),
         "speech_set_id": assessment.get("assigned_sets", {}).get("speech", {}).get("id"),
+        "content_match": _content_match(transcript, assigned_speech.get("paragraph")),
         "task": task,
         "audio_path": save_path,
         "transcript": transcript,

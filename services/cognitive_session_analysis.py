@@ -216,7 +216,7 @@ def build_session_plan(session_number, stress_level=0, prior_story=None, baselin
         next_session_date = None
         if session_number == 2:
             next_due = _session_due_date(baseline_date, 3)
-            next_session_date = next_due.strftime("%Y-%m-%d %H:%M %Z").strip()
+            next_session_date = next_due.strftime("%Y-%m-%d")
 
         return {
             "session_number": session_number,
@@ -268,8 +268,8 @@ def build_session_plan(session_number, stress_level=0, prior_story=None, baselin
         "questions": question_pool,
         # The frontend/DB must persist this baseline_date and pass it back
         # into build_session_plan() for session_number=2 and 3.
-        "baseline_date": baseline_for_schedule.strftime("%Y-%m-%d %H:%M %Z").strip(),
-        "next_session_date": next_due.strftime("%Y-%m-%d %H:%M %Z").strip(),
+        "baseline_date": baseline_for_schedule.strftime("%Y-%m-%d"),
+        "next_session_date": next_due.strftime("%Y-%m-%d"),
         "next_session_label": f"Day {SESSION_DAY_LABELS[2]}",
         "request_video_next_session": False,
     }

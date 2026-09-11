@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import timezone
 from flask import Blueprint, jsonify, send_file, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
@@ -7,10 +8,27 @@ from pymongo import ReturnDocument
 
 from extensions import get_db
 from services.pdf_report import build_report_pdf
-from services.rag import generate_longitudinal_recommendations
+from services.rag import generate_longitudinal_recommendations, generate_recommendations
 from services.session_assessment import trend
 
 reports_bp = Blueprint("reports", __name__)
+
+
+def _ordinal(number):
+    number = int(number)
+    if 10 < number % 100 < 14:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(number % 10, "th")
+    return f"{number}{suffix}"
+
+
+def _report_timestamp(value):
+    if not value:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone().isoformat()
 
 
 @reports_bp.post("/final/<cycle_id>")
@@ -25,6 +43,9 @@ def generate_final_report(cycle_id):
         modalities = session.get("modality_scores", {})
         rows.append({
             "session_number": session.get("session_number"),
+            "session_label": _ordinal(session.get("session_number", 1)) + " session",
+            "scheduled_for": session.get("scheduled_for"),
+            "completed_at": _report_timestamp(session.get("completed_at")),
             "risk_probability": session.get("risk_probability"),
             "risk_class": session.get("risk_class"),
             "cognitive_score": (session.get("cognitive_result") or {}).get("overall_cognitive_score"),
@@ -43,13 +64,23 @@ def generate_final_report(cycle_id):
             "clinical_score", "concern_score", "lifestyle_score",
         )},
         "recommendations": generate_longitudinal_recommendations(rows),
+        "session_count": len(rows),
     }
+    user = db.users.find_one({"_id": ObjectId(get_jwt_identity())}) or {}
+    reports_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    output_path = os.path.join(reports_dir, f"neurosense_final_{cycle_id}_{uuid.uuid4().hex[:8]}.pdf")
+    build_report_pdf(
+        output_path, user,
+        {"report_type": "final", "completed_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc)},
+        {}, {}, [], f"https://neurosense.app/verify/cycle/{cycle_id}", report_data,
+    )
     result = db.reports.find_one_and_update(
         {"cycle_id": cycle_id, "user_id": get_jwt_identity(), "report_type": "final"},
-        {"$set": {"report_data": report_data, "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc)}},
+        {"$set": {"report_data": report_data, "pdf_path": output_path, "generated_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc)}},
         upsert=True, return_document=ReturnDocument.AFTER,
     )
-    return jsonify(report_id=str(result["_id"]), report=report_data), 201
+    return jsonify(report_id=str(result["_id"]), report=report_data, download_url=f"/api/reports/download/{result['_id']}"), 201
 
 
 @reports_bp.post("/generate/<assessment_id>")
@@ -68,6 +99,19 @@ def generate_report(assessment_id):
         lifestyle = db.lifestyle_responses.find_one({"assessment_id": assessment_id}) or {}
         cognitive = assessment.get("cognitive_result") or {}
         speech_docs = list(db.speech_features.find({"assessment_id": assessment_id}))
+        recommendations = assessment.get("recommendations")
+        if not recommendations:
+            lifestyle_answers = lifestyle.get("answers", {})
+            recommendations = generate_recommendations(
+                assessment.get("risk_class", "Moderate"),
+                assessment.get("shap_top_features", []),
+                lifestyle.get("elevated_risk_factors", []),
+            )
+            db.assessments.update_one(
+                {"_id": ObjectId(assessment_id)},
+                {"$set": {"recommendations": recommendations}},
+            )
+            assessment["recommendations"] = recommendations
 
         reports_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "reports")
         os.makedirs(reports_dir, exist_ok=True)
@@ -90,6 +134,7 @@ def generate_report(assessment_id):
             "pdf_path": output_path,
             "qr_payload": verification_url,
             "emailed_to_guardian": False,
+            "recommendations": recommendations,
         }
         from models.schemas import now
         report_doc["generated_at"] = now()
@@ -98,7 +143,8 @@ def generate_report(assessment_id):
         return jsonify(
             report_id=str(result.inserted_id), 
             download_url=f"/api/reports/download/{result.inserted_id}",
-            filename=filename
+            filename=filename,
+            recommendations=recommendations,
         ), 201
     except Exception as e:
         return jsonify(error=f"Failed to generate report: {str(e)}"), 500
@@ -173,10 +219,25 @@ def risk_history():
     history = [
         {
             "assessment_id": str(d["_id"]),
+            "session_number": d.get("session_number"),
+            "session_label": _ordinal(d.get("session_number", 1)) + " session",
+            "scheduled_for": d.get("scheduled_for"),
             "date": d["completed_at"].isoformat() if d.get("completed_at") else None,
+            "completed_at": _report_timestamp(d.get("completed_at")),
             "risk_probability": d.get("risk_probability"),
             "risk_class": d.get("risk_class"),
         }
         for d in docs
     ]
-    return jsonify(history=history)
+    final_reports = []
+    for report in db.reports.find(
+        {"user_id": get_jwt_identity(), "report_type": "final"},
+        {"_id": 1, "cycle_id": 1, "generated_at": 1, "report_data.session_count": 1},
+    ).sort("generated_at", -1):
+        final_reports.append({
+            "report_id": str(report["_id"]),
+            "cycle_id": report.get("cycle_id"),
+            "session_count": (report.get("report_data") or {}).get("session_count", 3),
+            "generated_at": _report_timestamp(report.get("generated_at")),
+        })
+    return jsonify(history=history, final_reports=final_reports)

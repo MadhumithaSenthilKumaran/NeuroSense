@@ -19,8 +19,7 @@ class Config:
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
 
     # --- Database ---
-    DEFAULT_MONGO_URI = "mongodb://localhost:27017/neurosense"
-    MONGO_URI = os.environ.get("MONGO_URI") or DEFAULT_MONGO_URI
+    MONGO_URI = os.environ.get("MONGO_URI", "")
 
     # --- CORS ---
     CORS_ORIGINS = list(dict.fromkeys([

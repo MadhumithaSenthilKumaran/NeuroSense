@@ -3,10 +3,11 @@ import api from '../api'
 
 export default function Reports(){
   const [history, setHistory] = useState<any[]>([])
+  const [finalReports, setFinalReports] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
   useEffect(()=>{
-    api.get('/reports/history').then(r=>setHistory(r.data.history)).catch(()=>{})
+    api.get('/reports/history').then(r=>{ setHistory(r.data.history || []); setFinalReports(r.data.final_reports || []) }).catch(()=>{})
   },[])
 
   const generate = async (assessment_id:string)=>{
@@ -65,12 +66,22 @@ export default function Reports(){
       </div>
 
       <div className="report-list">
-        {history.length===0 && <div className="empty-state">No completed assessments yet.</div>}
+        {finalReports.map(report => (
+          <div key={report.report_id} className="report-card final-report-card">
+            <div>
+              <div className="report-date">Final three-session report</div>
+              <div className="report-risk">{report.session_count} sessions · generated {report.generated_at ? formatTimestamp(report.generated_at) : 'Unknown date'}</div>
+            </div>
+            <button className="form-submit small" onClick={() => downloadReport(report.report_id, `NeuroSense_Final_Report_${report.cycle_id || report.report_id}.pdf`)} disabled={loading}>Download PDF</button>
+          </div>
+        ))}
+        {history.length===0 && finalReports.length===0 && <div className="empty-state">No completed assessments yet.</div>}
         {history.map((h,idx)=>(
           <div key={idx} className="report-card">
             <div>
-              <div className="report-date">{h.date ? new Date(h.date).toLocaleString() : 'Unknown date'}</div>
+              <div className="report-date">{h.session_label || `Session ${h.session_number || '?'}`} · {h.scheduled_for || 'Date unavailable'}</div>
               <div className="report-risk">Risk: <strong>{h.risk_class || 'Pending'}</strong> ({h.risk_probability != null ? `${Math.round(Number(h.risk_probability) * 100)}%` : 'n/a'})</div>
+              <div className="report-risk">Completed {h.completed_at ? formatTimestamp(h.completed_at) : 'Unknown time'}</div>
             </div>
             <button className="form-submit small" onClick={() => generate(h.assessment_id || h._id)} disabled={loading}>Download PDF</button>
           </div>
@@ -78,4 +89,20 @@ export default function Reports(){
       </div>
     </div>
   )
+}
+
+async function downloadReport(reportId:string, filename:string) {
+  const fileRes = await api.get(`/reports/download/${reportId}`, { responseType: 'blob' })
+  const url = window.URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  window.URL.revokeObjectURL(url)
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }

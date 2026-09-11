@@ -38,10 +38,12 @@ def _memory_bank():
 
 def _speech_bank():
     topics = ["a morning walk", "a family meal", "a visit to a park", "a useful hobby", "a memorable journey"]
-    return [{"id": f"speech_{index + 1:02d}", "paragraph": (
-        f"Paragraph {index + 1}: Describe {topics[index % len(topics)]}. "
-        f"Include what happened first, one detail you noticed, and how the experience ended. Speak clearly and use complete sentences."
-    )} for index in range(50)]
+    return [{"id": f"speech_{index + 1:02d}", "paragraph": "\n".join([
+        f"On a {topics[index % len(topics)]}, the day began quietly and then became more active.",
+        f"The speaker noticed a small detail that made the experience feel personal and memorable.",
+        f"A simple decision helped the activity continue smoothly, even when plans changed.",
+        f"By the end, the experience felt useful and the speaker could describe what happened in order.",
+    ])} for index in range(50)]
 
 
 STORY_BANK = _story_bank()
@@ -101,7 +103,9 @@ def assign_sets(used_story_ids=None, used_memory_ids=None, used_speech_ids=None,
 
 
 def scheduled_date(started_at, session_number):
-    return (started_at + timedelta(days=SESSION_OFFSETS[session_number])).date().isoformat()
+    # Schedule by the calendar day shown to the user, while MongoDB keeps UTC timestamps.
+    local_start_date = started_at.astimezone().date() if started_at.tzinfo else started_at.date()
+    return (local_start_date + timedelta(days=SESSION_OFFSETS[session_number])).isoformat()
 
 
 def reminder_date(started_at, session_number):

@@ -9,7 +9,6 @@ export default function NavBar() {
       <div className="nav-links">
         <Link to="/" className="brand-mark">NeuroSense</Link>
         <Link to="/knowledge" className="nav-link">About</Link>
-        <Link to="/health" className="nav-link">Health</Link>
       </div>
       <div className="nav-actions">
         {token ? (
@@ -17,7 +16,6 @@ export default function NavBar() {
             <Link to="/dashboard" className="nav-link nav-link-strong">Dashboard</Link>
             <Link to="/profile" className="nav-link">Profile</Link>
             <Link to="/reports" className="nav-link">Reports</Link>
-            <Link to="/admin/dashboard" className="nav-link">Admin</Link>
             <button onClick={logout} className="nav-logout">Logout</button>
           </>
         ) : (

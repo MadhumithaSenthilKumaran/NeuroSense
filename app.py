@@ -22,7 +22,6 @@ def create_app(config_class=Config):
     from routes.cognitive import cognitive_bp
     from routes.lifestyle import lifestyle_bp
     from routes.reports import reports_bp
-    from routes.admin import admin_bp
     from routes.knowledge import knowledge_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
@@ -31,12 +30,7 @@ def create_app(config_class=Config):
     app.register_blueprint(cognitive_bp, url_prefix="/api/cognitive")
     app.register_blueprint(lifestyle_bp, url_prefix="/api/lifestyle")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
-    app.register_blueprint(admin_bp, url_prefix="/api/admin")
     app.register_blueprint(knowledge_bp, url_prefix="/api/knowledge")
-
-    @app.get("/api/health")
-    def health():
-        return jsonify(status="ok", service="neurosense-api")
 
     @app.errorhandler(404)
     def not_found(e):

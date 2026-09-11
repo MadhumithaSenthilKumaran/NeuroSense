@@ -113,3 +113,20 @@ def compute_cognitive_score(sub_scores: dict) -> float:
     if total_weight == 0:
         return 0.0
     return round(weighted_sum / total_weight, 1)
+
+
+def score_game_results(results: dict) -> dict:
+    pair = results.get("pair_game", {})
+    number = results.get("number_game", {})
+    camera = results.get("camera_session", {})
+    pair_score = min(100.0, float(pair.get("matched_pairs", 0)) / 8 * 100)
+    number_score = 100.0 if number.get("completed") else 0.0
+    expected = {str(word).lower() for word in camera.get("expected_words", [])}
+    recalled = {str(word).lower() for word in camera.get("recalled_words", [])}
+    word_score = 100.0 * len(expected & recalled) / len(expected) if expected else 0.0
+    action_duration_ms = camera.get("action_duration_ms")
+    action_captured = isinstance(action_duration_ms, (int, float)) and action_duration_ms > 0
+    action_score = 100.0 if action_captured else 0.0
+    capture_verified = bool(camera.get("capture_verified"))
+    camera_score = round((word_score + action_score) / 2, 1)
+    return {"score": round((pair_score + number_score + camera_score) / 3, 1), "pair_score": pair_score, "number_score": number_score, "camera_score": camera_score, "camera_words_recalled": len(expected & recalled), "camera_number_expected": camera.get("expected_number"), "camera_number_verification": "captured_for_review" if capture_verified else "not_captured", "action_duration_ms": action_duration_ms, "action_captured": action_captured}

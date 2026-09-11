@@ -60,7 +60,7 @@ export default function Profile() {
           <div className="form-field"><label>Name</label><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
           <div className="form-field"><label>Email</label><input value={user?.email || ''} readOnly /></div>
           <div className="form-field"><label>Age</label><input type="number" value={form.age} onChange={e => setForm({ ...form, age: e.target.value })} /></div>
-          <div className="form-field"><label>Gender</label><input value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })} /></div>
+          <div className="form-field"><label htmlFor="profile-gender">Gender</label><select id="profile-gender" value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}><option value="">Select gender</option><option value="Female">Female</option><option value="Male">Male</option><option value="Non-binary">Non-binary</option><option value="Prefer not to say">Prefer not to say</option></select></div>
           <div className="form-field"><label>Phone number</label><input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
           <div className="form-field"><label>Education</label><input value={form.education} onChange={e => setForm({ ...form, education: e.target.value })} /></div>
           <div className="form-field"><label>Occupation</label><input value={form.occupation} onChange={e => setForm({ ...form, occupation: e.target.value })} /></div>

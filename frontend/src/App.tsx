@@ -10,8 +10,6 @@ import SpeechUpload from './pages/SpeechUpload'
 import Finalize from './pages/Finalize'
 import Reports from './pages/Reports'
 import Knowledge from './pages/Knowledge'
-import Health from './pages/Health'
-import AdminDashboard from './pages/AdminDashboard'
 import Profile from './pages/Profile'
 import NavBar from './components/NavBar'
 import { AuthProvider, useAuth } from './context/AuthContext'
@@ -28,7 +26,6 @@ export default function App() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/health" element={<Health />} />
           <Route path="/knowledge" element={<Knowledge />} />
 
           <Route path="/login" element={<Login />} />
@@ -43,7 +40,6 @@ export default function App() {
 
           <Route path="/reports" element={<PrivateRoute><Reports /></PrivateRoute>} />
           <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
-          <Route path="/admin/dashboard" element={<PrivateRoute><AdminDashboard /></PrivateRoute>} />
         </Routes>
       </main>
     </AuthProvider>

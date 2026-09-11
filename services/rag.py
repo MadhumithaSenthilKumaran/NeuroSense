@@ -161,6 +161,28 @@ def generate_recommendations(risk_class: str, shap_top_features: list,
             "or neurologist who can order appropriate clinical testing. (Source: NIA)"
         )
 
+    action_templates = {
+        "exercise_days": "Build toward 30 minutes of brisk walking, cycling, swimming, or another comfortable aerobic activity on most days; start with 10-minute blocks if needed.",
+        "physical_activity": "Break up long sitting periods with brief walks and gentle strength or balance exercises two to three times weekly.",
+        "sleep_hours": "Keep a consistent sleep and wake time and aim for roughly 7-8 hours; discuss persistent snoring or daytime sleepiness with a clinician.",
+        "sleep_quality": "Create a wind-down routine, limit late caffeine and screens, and seek clinical advice if sleep remains poor.",
+        "stress_level": "Try 5-10 minutes of paced breathing or mindfulness daily, alongside regular movement and social support.",
+        "diet_quality": "Add vegetables, beans, whole grains, nuts, berries, olive oil, and fish while reducing heavily processed foods and added sugar.",
+        "smoking": "Consider a supported smoking-cessation plan through a clinician, pharmacist, or local quit service.",
+        "alcohol": "Track drinking for one week and work toward lower-risk limits; ask a clinician for support if cutting down is difficult.",
+        "social_interaction": "Schedule one meaningful conversation, group activity, or shared walk each week and increase gradually.",
+        "reading_habit": "Set aside 15-20 minutes most days for reading, a puzzle, language learning, music, or another genuinely engaging skill.",
+        "memory_complaints": "Use a single calendar, written reminders, labeled storage, and one-step checklists to reduce day-to-day memory load.",
+        "word_finding_difficulty": "Practice low-pressure naming and description exercises, such as describing an object without saying its name, and discuss persistent changes with a clinician.",
+        "hearing_loss": "Arrange a hearing check and use recommended hearing support to make conversations and social activity easier.",
+        "hypertension": "Review blood-pressure readings and treatment adherence with your clinician; regular walking can support cardiovascular health when appropriate.",
+        "diabetes": "Review glucose management, medication adherence, and activity goals with your healthcare team.",
+        "heart_disease": "Follow your cardiovascular care plan and ask your clinician which exercise intensity is appropriate for you.",
+    }
+    personalized_actions = [action_templates[f] for f in elevated_lifestyle_factors if f in action_templates]
+    if not personalized_actions:
+        personalized_actions.append("Choose one sustainable activity, such as a daily walk, regular sleep routine, or mentally engaging hobby, and track it for two weeks.")
+
     next_assessment_suggestion = {
         "Low": "Plan the next assessment in 6 months to monitor trends and keep early changes visible.",
         "Moderate": "Plan the next assessment in 3 months to re-check memory, lifestyle, and speech patterns over time.",
@@ -168,9 +190,11 @@ def generate_recommendations(risk_class: str, shap_top_features: list,
     }.get(risk_class, "Plan the next assessment in 3 months to track progress and catch changes early.")
 
     llm_summary = _llm_refine(
-        "Create a two-sentence personalized recommendation from this retrieved evidence and risk context. "
-        f"Risk class: {risk_class}. Evidence: {[entry['text'] for entry in retrieved]}. "
-        f"Drivers: {elevated_lifestyle_factors}."
+        "Create a concise, personalized, non-diagnostic action plan using ONLY the retrieved evidence below. "
+        "Mention the user's elevated factors and recommend different practical steps for the most relevant factors. "
+        "Do not repeat generic wording or claim that the screening diagnoses a condition. "
+        f"Risk class: {risk_class}. Elevated factors: {elevated_lifestyle_factors}. "
+        f"Retrieved evidence: {[entry['text'] for entry in retrieved]}."
     )
 
     return {
@@ -186,6 +210,7 @@ def generate_recommendations(risk_class: str, shap_top_features: list,
             "If you have any concerns about your memory or thinking, discussing them with a "
             "physician is a reasonable next step regardless of this screening result."
         ],
+        "personalized_action_plan": personalized_actions,
         "next_assessment_suggestion": next_assessment_suggestion,
         "disclaimer": DISCLAIMER,
     }
@@ -199,9 +224,23 @@ def generate_longitudinal_recommendations(sessions: list) -> dict:
     tags = ["memory_complaints", "sleep", "stress"] if cognitive and cognitive[-1] < cognitive[0] else ["exercise", "social_interaction"]
     retrieved = retrieve(tags, top_k=4)
     direction = "improved" if cognitive and cognitive[-1] > cognitive[0] else "changed" if cognitive else "was recorded"
+    evidence = "\n".join(f"- {entry['text']} (Source: {entry['source']})" for entry in retrieved)
+    llm_summary = _llm_refine(
+        "Write a personalized, explainable, non-diagnostic three-session screening summary. "
+        "Explain the direction of the measured scores, connect the explanation to the retrieved evidence, "
+        "and end with a practical weekly lifestyle routine. Do not diagnose or invent symptoms. "
+        f"Session data: {sessions}\nRetrieved evidence:\n{evidence}"
+    )
+    routine = [
+        "Most days: take a comfortable walk or other suitable movement, building gradually toward 150 minutes per week.",
+        "Daily: keep a consistent sleep and wake routine and reserve 15 minutes for reading, puzzles, music, or learning.",
+        "Weekly: plan two social activities and review blood pressure, glucose, hearing, or sleep concerns with a clinician when relevant.",
+    ]
     return {
-        "summary": f"Across the completed sessions, cognitive performance {direction}; recommendations reflect the measured pattern and reported factors.",
+        "summary": llm_summary or f"Across the completed sessions, cognitive performance {direction}; recommendations reflect the measured pattern and reported factors.",
+        "explanation": f"The comparison uses the first and last available scores across the three sessions. Cognitive performance {direction}; speech and risk trends are shown separately so changes are explainable rather than treated as a diagnosis.",
         "recommendations": [entry["text"] for entry in retrieved],
+        "lifestyle_routine": routine,
         "cognitive_scores": cognitive,
         "speech_scores": speech,
         "risk_scores": [item.get("risk_probability") for item in sessions],
