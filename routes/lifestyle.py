@@ -6,7 +6,7 @@ from bson import ObjectId
 from extensions import get_db
 from services.lifestyle_scoring import (
     LIFESTYLE_QUESTIONS, CONCERN_QUESTIONS, CONCERN_SCALE,
-    score_lifestyle, score_concern,
+    score_lifestyle, score_concern, compare_lifestyle_answers,
 )
 
 lifestyle_bp = Blueprint("lifestyle", __name__)
@@ -36,6 +36,21 @@ def submit_lifestyle(assessment_id):
     assessment = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
     if not assessment:
         return jsonify(error="Assessment not found"), 404
+    previous_lifestyle = None
+    if assessment.get("session_number", 1) > 1:
+        previous_lifestyle = db.lifestyle_responses.find_one(
+            {"cycle_id": assessment.get("cycle_id"), "user_id": get_jwt_identity(), "session_number": assessment.get("session_number", 1) - 1},
+            sort=[("created_at", -1)],
+        )
+    longitudinal = compare_lifestyle_answers(
+        (previous_lifestyle or {}).get("answers", {}), answers,
+    ) if previous_lifestyle else {
+        "previous_lifestyle_score": None,
+        "lifestyle_score_change": None,
+        "lifestyle_trend": "baseline",
+        "changed_answer_count": 0,
+        "changed_answers": [],
+    }
     doc = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
@@ -45,6 +60,7 @@ def submit_lifestyle(assessment_id):
         "concern_answers": concern_answers,
         **lifestyle_result,
         **concern_result,
+        **longitudinal,
         "created_at": datetime.now(timezone.utc),
     }
     result = db.lifestyle_responses.insert_one(doc)

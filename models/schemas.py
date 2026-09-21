@@ -30,6 +30,7 @@ def new_user_doc(
         "guardian_email": guardian_email,
         "guardian_phone": guardian_phone,
         "consent_share": consent_share,
+        "email_notifications": True,
         "role": "user",
         "created_at": now(),
     }

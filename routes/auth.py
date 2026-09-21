@@ -131,8 +131,25 @@ def update_me():
     allowed = {
         "name", "age", "gender", "phone", "education", "occupation",
         "guardian_email", "guardian_phone", "consent_share",
+        "email_notifications",
     }
     updates = {k: v for k, v in data.items() if k in allowed}
+    if "email_notifications" in updates and not isinstance(updates["email_notifications"], bool):
+        return jsonify(error="email_notifications must be true or false"), 400
     db = get_db()
     db.users.update_one({"_id": ObjectId(get_jwt_identity())}, {"$set": updates})
     return jsonify(message="Profile updated.")
+
+
+@auth_bp.get("/notifications")
+@jwt_required()
+def notifications():
+    db = get_db()
+    messages = list(db.notifications.find(
+        {"user_id": get_jwt_identity()},
+        {"_id": 0, "message": 1, "scheduled_for": 1, "read": 1, "emailed": 1, "created_at": 1},
+    ).sort("created_at", -1).limit(10))
+    for message in messages:
+        if message.get("created_at"):
+            message["created_at"] = message["created_at"].isoformat()
+    return jsonify(notifications=messages)

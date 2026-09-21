@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import api from '../api'
+import { useNavigate } from 'react-router-dom'
 
 export default function Reports(){
   const [history, setHistory] = useState<any[]>([])
   const [finalReports, setFinalReports] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(()=>{
-    api.get('/reports/history').then(r=>{ setHistory(r.data.history || []); setFinalReports(r.data.final_reports || []) }).catch(()=>{})
+    Promise.all([api.get('/reports/history'), api.get('/auth/notifications')]).then(([reports, messages])=>{
+      setHistory(reports.data.history || [])
+      setFinalReports(reports.data.final_reports || [])
+      setNotifications(messages.data.notifications || [])
+    }).catch(()=>{})
   },[])
 
   const generate = async (assessment_id:string)=>{
@@ -66,6 +73,7 @@ export default function Reports(){
       </div>
 
       <div className="report-list">
+        {notifications.length > 0 && <div className="assessment-suggestion"><strong>Session messages</strong>{notifications.map((notification, index) => <span key={`${notification.scheduled_for}-${index}`}>{notification.message}{notification.emailed ? ' Email sent.' : ''}</span>)}</div>}
         {finalReports.map(report => (
           <div key={report.report_id} className="report-card final-report-card">
             <div>
@@ -83,7 +91,15 @@ export default function Reports(){
               <div className="report-risk">Risk: <strong>{h.risk_class || 'Pending'}</strong> ({h.risk_probability != null ? `${Math.round(Number(h.risk_probability) * 100)}%` : 'n/a'})</div>
               <div className="report-risk">Completed {h.completed_at ? formatTimestamp(h.completed_at) : 'Unknown time'}</div>
             </div>
-            <button className="form-submit small" onClick={() => generate(h.assessment_id || h._id)} disabled={loading}>Download PDF</button>
+            <div className="report-actions">
+              {h.next_session_date && <button className="form-submit small" onClick={async () => {
+                try {
+                  const next = await api.post(`/assessment/${h.assessment_id || h._id}/next`)
+                  navigate(`/assessment/lifestyle/${next.data.assessment._id}`)
+                } catch (err: any) { alert(err?.response?.data?.error || 'The next session is not available yet') }
+              }}>Start next session</button>}
+              <button className="form-submit small" onClick={() => generate(h.assessment_id || h._id)} disabled={loading}>Download PDF</button>
+            </div>
           </div>
         ))}
       </div>

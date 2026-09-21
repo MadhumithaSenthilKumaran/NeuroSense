@@ -85,8 +85,8 @@ STORY_BANK = [
 # SESSION_DAY_OFFSETS is how many days after the Day-1 (baseline) date each
 # session actually falls on: 0, +3, +6.
 # ---------------------------------------------------------------------------
-SESSION_DAY_LABELS = {1: 1, 2: 4, 3: 7}
-SESSION_DAY_OFFSETS = {1: 0, 2: 3, 3: 6}
+SESSION_DAY_LABELS = {1: 1, 2: 3, 3: 5}
+SESSION_DAY_OFFSETS = {1: 0, 2: 2, 3: 4}
 
 
 def _local_now():
@@ -167,7 +167,7 @@ def get_session_lock_status(baseline_date, session_number, now=None):
 def build_session_plan(session_number, stress_level=0, prior_story=None, baseline_date=None, now=None):
     """
     baseline_date: the datetime Session 1 (Day 1) was completed. Required for
-    session_number 2 and 3 so we can enforce the Day 4 / Day 7 lock and keep
+    session_number 2 and 3 so we can enforce the Day 3 / Day 5 lock and keep
     using the SAME story shown on Day 1.
     """
     difficulty = _difficulty_from_stress(stress_level)

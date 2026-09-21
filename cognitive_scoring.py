@@ -7,6 +7,27 @@ MEMORY_WORDS = ["apple", "river", "chair", "book", "tiger", "window"]
 ATTENTION_SEQUENCE = ["A", "3", "B", "7", "C", "9", "D", "2"]
 VISUAL_MEMORY_GRID_SIZE = 9
 
+COGNITIVE_WEIGHTS = {
+    "memory_recall": 0.25,
+    "visual_memory": 0.25,
+    "pattern_recognition": 0.25,
+    "praxis_camera": 0.25,
+}
+
+COGNITIVE_EXPLANATIONS = {
+    "memory_recall": "Measures immediate recall of the displayed words.",
+    "visual_memory": "Measures the number-order task: selecting numbers in the requested sequence.",
+    "pattern_recognition": "Measures the pair-up game: matching the cards accurately.",
+    "praxis_camera": "Measures finger-number accuracy and movement quality from the camera recording.",
+}
+
+COGNITIVE_NAMES = {
+    "memory_recall": "Memory Recall",
+    "visual_memory": "Number Order",
+    "pattern_recognition": "Pair-Up Visual Memory",
+    "praxis_camera": "Camera Finger Praxis",
+}
+
 
 def score_memory_recall(recalled_words: list, memory_words=None) -> dict:
     memory_words = memory_words or MEMORY_WORDS
@@ -93,15 +114,7 @@ def compute_cognitive_score(sub_scores: dict) -> float:
     literature (e.g. MMSE / MoCA domain weighting), reaction time weighted
     lowest since it is the noisiest signal.
     """
-    weights = {
-        "memory_recall": 0.25,
-        "story_recall": 0.15,
-        "reaction_time": 0.10,
-        "attention": 0.15,
-        "visual_memory": 0.15,
-        "pattern_recognition": 0.15,
-        "orientation": 0.20,
-    }
+    weights = COGNITIVE_WEIGHTS
     total_weight = 0.0
     weighted_sum = 0.0
     for key, weight in weights.items():
@@ -115,12 +128,100 @@ def compute_cognitive_score(sub_scores: dict) -> float:
     return round(weighted_sum / total_weight, 1)
 
 
+def cognitive_breakdown(sub_results: dict, game_result: dict, overall_score: float) -> dict:
+    """Return an auditable explanation of every cognitive score contribution."""
+    sub_scores = {key: (value or {}).get("score") for key, value in sub_results.items()}
+    available_weight = sum(
+        COGNITIVE_WEIGHTS[key]
+        for key, value in sub_scores.items()
+        if key in COGNITIVE_WEIGHTS and value is not None
+    )
+    parts = []
+    for key, weight in COGNITIVE_WEIGHTS.items():
+        score = sub_scores.get(key)
+        normalized_weight = weight / available_weight if score is not None and available_weight else 0.0
+        parts.append({
+            "key": key,
+            "name": COGNITIVE_NAMES[key],
+            "score": score,
+            "weight_percent": round(normalized_weight * 100, 1),
+            "contribution_points": round((score or 0) * normalized_weight, 1) if score is not None else None,
+            "explanation": COGNITIVE_EXPLANATIONS[key],
+            "game_breakdown": game_result if key == "praxis_camera" else None,
+        })
+    return {
+        "overall_score": overall_score,
+        "method": "Only the four evaluated components are included: memory recall, number order, pair matching, and camera finger praxis. Each contributes 25%.",
+        "parts": parts,
+    }
+
+
 def score_game_results(results: dict) -> dict:
     pair = results.get("pair_game", {})
     number = results.get("number_game", {})
     camera = results.get("camera_session", {})
-    pair_score = min(100.0, float(pair.get("matched_pairs", 0)) / 8 * 100)
-    number_score = 100.0 if number.get("completed") else 0.0
+    pair_attempts = max(0, int(pair.get("attempts", 0) or 0))
+    pair_correct = max(0, min(8, int(pair.get("correct_matches", pair.get("matched_pairs", 0)) or 0)))
+    pair_incorrect = max(0, int(pair.get("incorrect_attempts", max(0, pair_attempts - pair_correct)) or 0))
+    pair_completion_ms = pair.get("completion_time_ms")
+    pair_completion_seconds = pair.get("completion_time_seconds")
+    if pair_completion_seconds is None and isinstance(pair_completion_ms, (int, float)):
+        pair_completion_seconds = pair_completion_ms / 1000
+    pair_accuracy = round(100 * pair_correct / pair_attempts, 1) if pair_attempts else 0.0
+    # Prototype research bands, not clinical norms or diagnostic thresholds.
+    if pair_completion_seconds is None:
+        pair_time_score = 0.0
+    elif pair_completion_seconds <= 20:
+        pair_time_score = 100.0
+    elif pair_completion_seconds <= 30:
+        pair_time_score = 90.0
+    elif pair_completion_seconds <= 40:
+        pair_time_score = 75.0
+    elif pair_completion_seconds <= 60:
+        pair_time_score = 55.0
+    else:
+        pair_time_score = 35.0
+    pair_performance_score = round(0.60 * pair_accuracy + 0.40 * pair_time_score, 1)
+    pair_score = pair_performance_score
+
+    elapsed_ms = number.get("completion_time_ms", number.get("elapsed_ms"))
+    completed = bool(number.get("completed"))
+    completion_seconds = number.get("completion_time_seconds")
+    if completion_seconds is None and isinstance(elapsed_ms, (int, float)):
+        completion_seconds = elapsed_ms / 1000
+    # Prototype research bands, not clinical norms or diagnostic thresholds.
+    if not completed or completion_seconds is None:
+        number_time_score = 0.0
+    elif completion_seconds <= 20:
+        number_time_score = 10.0
+    elif completion_seconds <= 25:
+        number_time_score = 9.0
+    elif completion_seconds <= 30:
+        number_time_score = 8.0
+    elif completion_seconds <= 35:
+        number_time_score = 7.0
+    elif completion_seconds <= 40:
+        number_time_score = 6.0
+    elif completion_seconds <= 50:
+        number_time_score = 5.0
+    elif completion_seconds <= 60:
+        number_time_score = 4.0
+    elif completion_seconds <= 75:
+        number_time_score = 3.0
+    elif completion_seconds <= 90:
+        number_time_score = 2.0
+    else:
+        number_time_score = 1.0
+    number_errors = max(0, int(number.get("errors", number.get("incorrect_clicks", 0)) or 0))
+    number_error_penalty = number_errors * 0.5
+    number_task_score = round(max(0.0, min(10.0, number_time_score - number_error_penalty)), 1)
+    number_score = round(number_task_score * 10, 1)
+    praxis_trials = camera.get("praxis_trials", [])
+    praxis_score = (sum(bool(trial.get("is_correct_match")) for trial in praxis_trials) / len(praxis_trials) * 100) if praxis_trials else 0.0
+    prompted_numbers = {int(number) for number in camera.get("prompted_numbers", []) if str(number).isdigit()}
+    recalled_numbers = {int(number) for number in camera.get("recalled_numbers", []) if str(number).isdigit()}
+    camera_recall_correct = len(prompted_numbers & recalled_numbers)
+    camera_recall_score = round(100 * camera_recall_correct / len(prompted_numbers), 1) if prompted_numbers else 0.0
     expected = {str(word).lower() for word in camera.get("expected_words", [])}
     recalled = {str(word).lower() for word in camera.get("recalled_words", [])}
     word_score = 100.0 * len(expected & recalled) / len(expected) if expected else 0.0
@@ -128,5 +229,45 @@ def score_game_results(results: dict) -> dict:
     action_captured = isinstance(action_duration_ms, (int, float)) and action_duration_ms > 0
     action_score = 100.0 if action_captured else 0.0
     capture_verified = bool(camera.get("capture_verified"))
-    camera_score = round((word_score + action_score) / 2, 1)
-    return {"score": round((pair_score + number_score + camera_score) / 3, 1), "pair_score": pair_score, "number_score": number_score, "camera_score": camera_score, "camera_words_recalled": len(expected & recalled), "camera_number_expected": camera.get("expected_number"), "camera_number_verification": "captured_for_review" if capture_verified else "not_captured", "action_duration_ms": action_duration_ms, "action_captured": action_captured}
+    correct_trials = sum(bool(trial.get("is_correct_match")) for trial in praxis_trials)
+    camera_sequence_score = round(100 * correct_trials / len(praxis_trials), 1) if praxis_trials else 0.0
+    camera_score = camera_sequence_score if praxis_trials else 0.0
+    return {
+        "score": round((pair_score + number_score + camera_score) / 3, 1),
+        "pair_score": pair_score,
+        "pairup_completion_time": pair_completion_seconds,
+        "pairup_attempts": pair_attempts,
+        "pairup_correct_matches": pair_correct,
+        "pairup_incorrect_attempts": pair_incorrect,
+        "pairup_accuracy": pair_accuracy,
+        "pairup_time_score": pair_time_score,
+        "pairup_performance_score": pair_performance_score,
+        "number_score": number_score,
+        "number_task_score": number_task_score,
+        "number_elapsed_ms": elapsed_ms,
+        "number_completion_time_seconds": completion_seconds,
+        "number_sequence_completed": completed,
+        "number_errors": number_errors,
+        "number_correct_clicks": number.get("correct_clicks", 25 if completed else 0),
+        "number_incorrect_clicks": number.get("incorrect_clicks", number_errors),
+        "number_time_score": number_time_score,
+        "number_error_penalty": number_error_penalty,
+        "number_final_task_score": number_task_score,
+        "number_grid_layout": number.get("grid_layout", []),
+        "number_intervals_ms": number.get("intervals_ms", []),
+        "camera_score": camera_score,
+        "camera_recall_score": camera_recall_score,
+        "camera_recall_correct": camera_recall_correct,
+        "camera_recall_total": len(prompted_numbers),
+        "camera_recalled_numbers": sorted(recalled_numbers),
+        "camera_sequence_score": camera_sequence_score,
+        "camera_correct_trials": correct_trials,
+        "camera_total_trials": len(praxis_trials),
+        "camera_words_recalled": len(expected & recalled),
+        "camera_number_expected": camera.get("expected_number"),
+        "camera_number_verification": "captured_for_review" if capture_verified else "not_captured",
+        "praxis_trials": praxis_trials,
+        "accepted_captures": camera.get("accepted_captures", []),
+        "action_duration_ms": action_duration_ms,
+        "action_captured": action_captured,
+    }

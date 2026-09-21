@@ -213,7 +213,7 @@ def risk_history():
     docs = list(
         db.assessments.find(
             {"user_id": get_jwt_identity(), "status": "completed"},
-            {"_id": 1, "completed_at": 1, "risk_probability": 1, "risk_class": 1},
+            {"_id": 1, "session_number": 1, "scheduled_for": 1, "next_session_date": 1, "completed_at": 1, "risk_probability": 1, "risk_class": 1},
         ).sort("completed_at", 1)
     )
     history = [
@@ -222,6 +222,7 @@ def risk_history():
             "session_number": d.get("session_number"),
             "session_label": _ordinal(d.get("session_number", 1)) + " session",
             "scheduled_for": d.get("scheduled_for"),
+            "next_session_date": d.get("next_session_date"),
             "date": d["completed_at"].isoformat() if d.get("completed_at") else None,
             "completed_at": _report_timestamp(d.get("completed_at")),
             "risk_probability": d.get("risk_probability"),

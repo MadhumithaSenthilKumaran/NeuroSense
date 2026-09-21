@@ -9,12 +9,14 @@ export default function Finalize(){
   const [nextLoading, setNextLoading] = useState(false)
   const [result, setResult] = useState<any | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notificationMessage, setNotificationMessage] = useState('')
 
   const run = async ()=>{
     setLoading(true); setError(null)
     try{
       const res = await api.post(`/assessment/${id}/finalize`)
       setResult(res.data.assessment)
+      setNotificationMessage('Assessment completed successfully. Your report is ready. A notification has been sent to your selected communication channels.')
     }catch(err:any){
       setError(err?.response?.data?.error || err?.response?.data?.msg || 'Failed to finalize')
     }finally{setLoading(false)}
@@ -42,6 +44,7 @@ export default function Finalize(){
 
       {result && (
         <div className="finalize-result">
+          {notificationMessage && <div className="form-message">{notificationMessage}</div>}
           <div className="result-summary">
             <div><span>Overall risk</span><strong>{result.risk_class || 'Not available'}</strong><small>{formatProbability(result.risk_probability)}</small></div>
             <div><span>Modalities used</span><strong>{result.used_modalities?.length || 0}</strong><small>{result.used_modalities?.join(', ') || 'None recorded'}</small></div>
@@ -51,6 +54,7 @@ export default function Finalize(){
             <ScoreBars result={result} />
             <ModalityChart scores={result.modality_scores} />
           </div>
+          {result.cognitive_result?.breakdown && <CognitiveBreakdown breakdown={result.cognitive_result.breakdown} />}
           {result.next_session_date && (
             <button className="form-submit next-session" onClick={startNextSession} disabled={nextLoading}>
               {nextLoading ? 'Checking date...' : 'Start next session'}
@@ -84,6 +88,10 @@ export default function Finalize(){
 function RecommendationList({ title, items }: { title: string; items?: string[] }) {
   if (!items?.length) return null
   return <div className="recommendation-item"><strong>{title}</strong><span>{items[0]}</span><small>{items.length} suggestion{items.length === 1 ? '' : 's'}</small></div>
+}
+
+function CognitiveBreakdown({ breakdown }: { breakdown: any }) {
+  return <section className="recommendation-panel cognitive-breakdown"><h3>How the cognitive score was formed</h3><p>{breakdown.method}</p><div className="recommendation-grid">{breakdown.parts.map((part: any) => <div className="recommendation-item" key={part.key}><strong>{part.name} · {part.weight_percent}%</strong><span>{part.score == null ? 'Not recorded' : `${part.score}/100`}</span><small>{part.contribution_points == null ? 'No contribution' : `${part.contribution_points} points contributed`}</small><small>{part.explanation}</small>{part.key === 'visual_memory' && part.game_breakdown?.number_elapsed_ms != null && <small>Number-order time: {(Number(part.game_breakdown.number_elapsed_ms) / 1000).toFixed(2)}s · sequence completed: {part.game_breakdown.number_sequence_completed ? 'yes' : 'no'}.</small>}{part.key === 'praxis_camera' && <><small>Sequential camera cross-check: {part.game_breakdown?.camera_correct_trials ?? 0}/{part.game_breakdown?.camera_total_trials ?? 0} numbers correct ({part.game_breakdown?.camera_sequence_score ?? 0}/100).</small>{part.game_breakdown?.praxis_trials?.map((trial: any) => <small key={`${trial.prompted_number}-${trial.gestured_number_detected}`}>Number {trial.prompted_number}: detected {trial.gestured_number_detected}; latency {trial.metrics?.motor_latency_seconds ?? 'n/a'}s, frames with hand {trial.metrics?.frames_with_hand ?? 0}.</small>)}</>}</div>)}</div></section>
 }
 
 function formatProbability(value: number | null | undefined) {

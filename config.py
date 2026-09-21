@@ -54,11 +54,18 @@ class Config:
     SMTP_USER = os.environ.get("SMTP_USER", "")
     SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
     SMTP_FROM = os.environ.get("SMTP_FROM", "no-reply@neurosense.app")
+    SMTP_USERNAME = os.environ.get("SMTP_USERNAME", SMTP_USER)
+    SMTP_FROM_EMAIL = os.environ.get("SMTP_FROM_EMAIL", SMTP_FROM)
+
+    # --- Assessment email notifications ---
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
     # --- Optional RAG + LLM recommendation refinement ---
     LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
     LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
     LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 
     # --- Feature flags ---
     # Real transcription/embedding models are heavy. Default to lightweight

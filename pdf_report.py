@@ -8,6 +8,7 @@ page).
 
 import os
 from datetime import datetime, timezone
+from xml.sax.saxutils import escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -157,11 +158,9 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
         story.append(Paragraph("Cognitive Assessment Results", styles["NSHeading"]))
         rows = [
             ["Memory Recall", f"{cognitive.get('memory_recall', {}).get('score', '-')}"],
-            ["Reaction Time", f"{cognitive.get('reaction_time', {}).get('avg_ms', '-')} ms"],
-            ["Attention", f"{cognitive.get('attention', {}).get('score', '-')}"],
-            ["Visual Memory", f"{cognitive.get('visual_memory', {}).get('score', '-')}"],
-            ["Pattern Recognition", f"{cognitive.get('pattern_recognition', {}).get('score', '-')}"],
-            ["Orientation", f"{cognitive.get('orientation', {}).get('score', '-')}"],
+            ["Number Order", f"{cognitive.get('game_results', {}).get('number_score', '-')}"],
+            ["Pair-Up visual memory performance", f"{cognitive.get('game_results', {}).get('pair_score', '-')}"],
+            ["Camera Finger Praxis", f"{cognitive.get('game_results', {}).get('camera_score', '-')}"],
             ["Overall Cognitive Score", f"{cognitive.get('overall_cognitive_score', '-')}"],
         ]
         ct = Table([["Test", "Score"]] + rows, colWidths=[70 * mm, 40 * mm])
@@ -172,6 +171,38 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
             ("FONTSIZE", (0, 0), (-1, -1), 9),
         ]))
         story.append(ct)
+        breakdown = cognitive.get("breakdown", {})
+        if breakdown:
+            story.append(Spacer(1, 6))
+            story.append(Paragraph(breakdown.get("method", "Each available task contributes to the normalized cognitive score."), styles["NSBody"]))
+            detail_rows = [["Component", "Score", "Weight", "Contribution"]]
+            for part in breakdown.get("parts", []):
+                detail_rows.append([
+                    part.get("name", "-"),
+                    "-" if part.get("score") is None else str(part.get("score")),
+                    f"{part.get('weight_percent', 0)}%",
+                    "-" if part.get("contribution_points") is None else str(part.get("contribution_points")),
+                ])
+            detail_table = Table(detail_rows, colWidths=[65 * mm, 25 * mm, 25 * mm, 30 * mm])
+            detail_table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), BLUE),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+            ]))
+            story.append(detail_table)
+            for part in breakdown.get("parts", []):
+                story.append(Paragraph(f"<b>{part.get('name', '-')}:</b> {part.get('explanation', '-')}", styles["NSBody"]))
+                if part.get("key") == "praxis_camera":
+                    game = part.get("game_breakdown", {})
+                    praxis = game.get("praxis_trials", [])
+                    for trial in praxis:
+                        metrics = trial.get("metrics", {})
+                        story.append(Paragraph(
+                            f"Finger praxis number {trial.get('prompted_number', '-')} -> detected {trial.get('gestured_number_detected', '-')}; "
+                            f"latency {metrics.get('motor_latency_seconds', '-')}s, jitter {metrics.get('spatial_jitter_score', '-')}, "
+                            f"velocity variance {metrics.get('angular_velocity_variance', '-') }.", styles["NSBody"]
+                        ))
 
     # Speech analysis
     if speech_docs:
@@ -190,6 +221,14 @@ def build_report_pdf(output_path: str, user: dict, assessment: dict,
             ("FONTSIZE", (0, 0), (-1, -1), 8.5),
         ]))
         story.append(spt)
+        for speech in speech_docs:
+            if speech.get("transcript"):
+                story.append(Paragraph("<b>Transcription:</b> " + escape(str(speech["transcript"])), styles["NSBody"]))
+                story.append(Paragraph(
+                    "The transcription is used to derive speech rate, pauses, pitch, vocabulary, and linguistic features. "
+                    "Those features are compared with the speech model patterns; the text itself is not a diagnosis.",
+                    styles["NSBody"],
+                ))
 
     # Lifestyle summary
     if lifestyle:

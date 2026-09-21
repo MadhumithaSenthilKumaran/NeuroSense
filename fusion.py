@@ -24,10 +24,11 @@ from services.ml_model import predict_clinical, predict_speech
 # Relative trust in each modality. Clinical model carries the most weight
 # because it's trained on the largest, most reliable labeled dataset.
 WEIGHTS = {
-    "clinical": 0.45,
-    "speech": 0.20,
-    "cognitive": 0.20,
-    "concern": 0.15,
+    "cognitive": 0.40,
+    "speech": 0.25,
+    "lifestyle_stress": 0.15,
+    "self_reported_concerns": 0.10,
+    "response_consistency": 0.10,
 }
 
 CLINICAL_FEATURE_MAP = {
@@ -67,7 +68,9 @@ def risk_class_from_probability(p: float) -> str:
 
 
 def fuse(clinical_features: dict, speech_linguistic_features: dict,
-         cognitive_overall_score: float, concern_score: float):
+         cognitive_overall_score: float, concern_score: float,
+         lifestyle_stress_score: float = None,
+         response_consistency_score: float = None):
     """
     Returns:
       {
@@ -84,8 +87,6 @@ def fuse(clinical_features: dict, speech_linguistic_features: dict,
 
     # 1. Clinical model (always available — the questionnaire is mandatory)
     clinical_proba, clinical_contrib = predict_clinical(clinical_features)
-    components["clinical"] = clinical_proba
-    used.append("clinical")
     shap_features.extend([
         {"feature": f, "modality": "clinical", "shap_value": round(v, 4)}
         for f, v in clinical_contrib[:5]
@@ -113,13 +114,23 @@ def fuse(clinical_features: dict, speech_linguistic_features: dict,
 
     # 4. Concern composite (0-100, higher = more concern -> risk directly)
     if concern_score is not None:
-        components["concern"] = concern_score / 100
-        used.append("concern")
+        components["self_reported_concerns"] = concern_score / 100
+        used.append("self_reported_concerns")
         shap_features.append({
             "feature": "Self-reported concern composite",
             "modality": "concern",
-            "shap_value": round(components["concern"], 4),
+            "shap_value": round(components["self_reported_concerns"], 4),
         })
+
+    if lifestyle_stress_score is not None:
+        components["lifestyle_stress"] = lifestyle_stress_score / 100
+        used.append("lifestyle_stress")
+        shap_features.append({"feature": "Lifestyle stress risk", "modality": "lifestyle_stress", "shap_value": round(components["lifestyle_stress"], 4)})
+
+    if response_consistency_score is not None:
+        components["response_consistency"] = 1 - (response_consistency_score / 100)
+        used.append("response_consistency")
+        shap_features.append({"feature": "Response consistency", "modality": "response_consistency", "shap_value": round(components["response_consistency"], 4)})
 
     total_weight = sum(WEIGHTS[k] for k in components)
     risk_probability = sum(components[k] * WEIGHTS[k] for k in components) / total_weight

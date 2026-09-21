@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import os
 import uuid
+import logging
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
@@ -12,9 +13,12 @@ from services.linguistic_features import extract_linguistic_features
 from services.rag import generate_recommendations, generate_longitudinal_recommendations
 from services.session_assessment import STORY_BANK, assign_sets, build_cycle_schedule, trend
 from services.lifestyle_scoring import score_lifestyle
+from services.email_service import send_session_reminder
 from services.pdf_report import build_report_pdf
+from services.notification_service import send_assessment_notification, send_session_day_notification
 
 assessment_bp = Blueprint("assessment", __name__)
+logger = logging.getLogger(__name__)
 
 
 @assessment_bp.post("/start")
@@ -50,12 +54,36 @@ def start_assessment(cycle_id_override=None, session_number_override=None):
         cycle = {"schedule": cycle_schedule, "started_at": started_at}
 
     schedule = next(item for item in cycle.get("schedule", build_cycle_schedule(started_at)) if item["session_number"] == session_number)
-    if cycle_id and session_number > 1 and now.astimezone().date().isoformat() < schedule["scheduled_for"]:
-        return jsonify(error=f"Session {session_number} is available on {schedule['scheduled_for']}"), 403
+    if cycle_id and session_number > 1:
+        today = now.astimezone().date().isoformat()
+        if today < schedule["scheduled_for"]:
+            return jsonify(error=f"Session {session_number} is available on {schedule['scheduled_for']}"), 403
+        if today > schedule["scheduled_for"]:
+            return jsonify(error=f"Session {session_number} was scheduled for {schedule['scheduled_for']} and is no longer available"), 403
+        if today == schedule["scheduled_for"]:
+            try:
+                user = db.users.find_one({"_id": ObjectId(user_id)}) or {}
+                reminder = db.notifications.find_one({
+                    "user_id": user_id, "cycle_id": cycle_id, "session_number": session_number,
+                    "session_day_email_sent": True,
+                })
+                if not reminder:
+                    email_status = send_session_day_notification(user, session_number, schedule["scheduled_for"])
+                    db.notifications.update_one(
+                        {"user_id": user_id, "cycle_id": cycle_id, "session_number": session_number},
+                        {"$set": {"session_day_email_sent": email_status == "sent", "session_day_email_status": email_status, "created_at": now}},
+                        upsert=True,
+                    )
+            except Exception as error:
+                logger.error("Session-day email notification handling failed: %s", error)
 
     prior = list(db.assessments.find({"user_id": user_id}, {"cycle_id": 1, "session_number": 1, "assigned_sets": 1}).sort("session_number", 1))
     used = {key: [item.get("assigned_sets", {}).get(key, {}).get("id") for item in prior]
             for key in ("story", "memory", "speech")}
+    used["speech"] = [speech_id for item in prior for speech_id in (
+        [item.get("assigned_sets", {}).get("speech", {}).get("id")]
+        + [option.get("id") for option in item.get("assigned_sets", {}).get("speech", {}).get("options", [])]
+    ) if speech_id]
 
     current_cycle_prior = [item for item in prior if item.get("cycle_id") == cycle_id]
     previous_assessment = next(
@@ -148,7 +176,7 @@ def finalize_assessment(assessment_id):
     concern), generates recommendations, and marks the assessment complete.
     """
     db = get_db()
-    assessment = db.assessments.find_one({"_id": ObjectId(assessment_id)})
+    assessment = db.assessments.find_one({"_id": ObjectId(assessment_id), "user_id": get_jwt_identity()})
     if not assessment:
         return jsonify(error="Assessment not found"), 404
 
@@ -175,8 +203,17 @@ def finalize_assessment(assessment_id):
     cognitive_result = assessment.get("cognitive_result")
     cognitive_overall = cognitive_result.get("overall_cognitive_score") if cognitive_result else None
     concern_score = assessment.get("concern_score")
+    answers = lifestyle_doc.get("answers", {})
+    try:
+        lifestyle_stress_score = float(answers.get("stress_level")) * 10
+    except (TypeError, ValueError):
+        lifestyle_stress_score = None
+    response_consistency_score = (cognitive_result or {}).get("response_consistency_score")
 
-    fusion_result = fuse(clinical_features, speech_linguistic, cognitive_overall, concern_score)
+    fusion_result = fuse(
+        clinical_features, speech_linguistic, cognitive_overall, concern_score,
+        lifestyle_stress_score, response_consistency_score,
+    )
 
     recommendations = generate_recommendations(
         fusion_result["risk_class"],
@@ -206,8 +243,13 @@ def finalize_assessment(assessment_id):
         "fused_features": clinical_features,
         "lifestyle_score": lifestyle_score,
         "lifestyle_probability": lifestyle_probability,
+        "previous_lifestyle_score": lifestyle_doc.get("previous_lifestyle_score"),
+        "lifestyle_score_change": lifestyle_doc.get("lifestyle_score_change"),
+        "lifestyle_trend": lifestyle_doc.get("lifestyle_trend"),
         "clinical_probability": fusion_result["modality_scores"].get("clinical"),
         "clinical_concern_score": concern_score,
+        "lifestyle_stress_score": lifestyle_stress_score,
+        "response_consistency_score": response_consistency_score,
         "risk_probability": fusion_result["risk_probability"],
         "risk_class": fusion_result["risk_class"],
         "modality_scores": fusion_result["modality_scores"],
@@ -240,6 +282,27 @@ def finalize_assessment(assessment_id):
         {"$set": session_report},
         upsert=True,
     )
+
+    if next_schedule:
+        user = db.users.find_one({"_id": ObjectId(get_jwt_identity())}) or {}
+        message = (
+            f"Session {assessment.get('session_number', 1) + 1} is scheduled for "
+            f"{next_schedule['scheduled_for']}. It will be available only on that date."
+        )
+        db.notifications.update_one(
+            {"user_id": get_jwt_identity(), "cycle_id": assessment.get("cycle_id"), "session_number": assessment.get("session_number", 1) + 1},
+            {"$set": {"message": message, "scheduled_for": next_schedule["scheduled_for"], "read": False, "created_at": now}},
+            upsert=True,
+        )
+        if user.get("email") and user.get("email_notifications", True) and current_app.config.get("SMTP_HOST"):
+            try:
+                send_session_reminder(user["email"], user.get("name", "there"), assessment.get("session_number", 1) + 1, next_schedule["scheduled_for"])
+                db.notifications.update_one(
+                    {"user_id": get_jwt_identity(), "cycle_id": assessment.get("cycle_id"), "session_number": assessment.get("session_number", 1) + 1},
+                    {"$set": {"emailed": True}},
+                )
+            except Exception:
+                pass
 
     if assessment.get("session_number") == 3:
         completed = list(db.assessments.find(
@@ -287,9 +350,28 @@ def finalize_assessment(assessment_id):
                 {"$set": {"pdf_path": output_path}},
             )
 
+    # Report persistence is complete before notifications are attempted. Each
+    # channel is isolated by the service so delivery cannot fail finalization.
+    user = db.users.find_one({"_id": ObjectId(get_jwt_identity())}) or {}
+    try:
+        notification_status = send_assessment_notification(user)
+    except Exception as error:
+        logger.error("Assessment notification dispatch failed: %s", error)
+        notification_status = {"email_notification_status": "failed"}
+    notification_status["notification_attempted_at"] = datetime.now(timezone.utc)
+    try:
+        db.assessments.update_one({"_id": ObjectId(assessment_id)}, {"$set": notification_status})
+        db.reports.update_one(
+            {"assessment_id": assessment_id, "report_type": "session"},
+            {"$set": notification_status},
+        )
+    except Exception as error:
+        logger.error("Unable to store assessment notification status: %s", error)
+
     result_doc = {**assessment, **update}
     result_doc["_id"] = str(result_doc["_id"])
     result_doc["completed_at"] = now.isoformat()
+    result_doc.update({key: value for key, value in notification_status.items() if key != "notification_attempted_at"})
     if isinstance(result_doc.get("created_at"), datetime):
         result_doc["created_at"] = result_doc["created_at"].isoformat()
 

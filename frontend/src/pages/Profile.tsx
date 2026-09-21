@@ -14,6 +14,7 @@ export default function Profile() {
     guardian_email: '',
     guardian_phone: '',
     consent_share: false,
+    email_notifications: true,
   })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -30,6 +31,7 @@ export default function Profile() {
       guardian_email: user.guardian_email || '',
       guardian_phone: user.guardian_phone || '',
       consent_share: !!user.consent_share,
+      email_notifications: user.email_notifications !== false,
     })
   }, [user])
 
@@ -68,9 +70,15 @@ export default function Profile() {
           <div className="form-field"><label>Guardian phone</label><input value={form.guardian_phone} onChange={e => setForm({ ...form, guardian_phone: e.target.value })} /></div>
         </div>
 
+        <section className="notification-preferences">
+          <h2>Notification Preferences</h2>
+          <label className="consent-box"><input type="checkbox" checked={form.email_notifications} onChange={e => setForm({ ...form, email_notifications: e.target.checked })} />Email Notifications</label>
+          <p className="profile-note">Email: {user?.email || 'Not available'}</p>
+        </section>
+
         <label className="consent-box">
           <input type="checkbox" checked={form.consent_share} onChange={e => setForm({ ...form, consent_share: e.target.checked })} />
-          I consent to share my assessment reports with my guardian by email or SMS.
+          I consent to share my assessment reports with my guardian by email.
         </label>
 
         <button className="form-submit" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save profile'}</button>

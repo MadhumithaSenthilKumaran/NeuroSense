@@ -1,12 +1,19 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
 import { useEffect, useState } from 'react';
 import api from '../api';
+import { useNavigate } from 'react-router-dom';
 export default function Reports() {
     const [history, setHistory] = useState([]);
     const [finalReports, setFinalReports] = useState([]);
+    const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(false);
+    const navigate = useNavigate();
     useEffect(() => {
-        api.get('/reports/history').then(r => { setHistory(r.data.history || []); setFinalReports(r.data.final_reports || []); }).catch(() => { });
+        Promise.all([api.get('/reports/history'), api.get('/auth/notifications')]).then(([reports, messages]) => {
+            setHistory(reports.data.history || []);
+            setFinalReports(reports.data.final_reports || []);
+            setNotifications(messages.data.notifications || []);
+        }).catch(() => { });
     }, []);
     const generate = async (assessment_id) => {
         setLoading(true);
@@ -51,7 +58,15 @@ export default function Reports() {
             setLoading(false);
         }
     };
-    return (_jsxs("div", { className: "report-page", children: [_jsxs("div", { className: "page-intro", children: [_jsx("div", { className: "eyebrow", children: "Assessment archive" }), _jsx("h1", { children: "Reports and summaries" }), _jsx("p", { children: "Your screening reports, risk history, and recent insights are kept here for easy review." })] }), _jsxs("div", { className: "report-list", children: [finalReports.map(report => (_jsxs("div", { className: "report-card final-report-card", children: [_jsxs("div", { children: [_jsx("div", { className: "report-date", children: "Final three-session report" }), _jsxs("div", { className: "report-risk", children: [report.session_count, " sessions \u00B7 generated ", report.generated_at ? formatTimestamp(report.generated_at) : 'Unknown date'] })] }), _jsx("button", { className: "form-submit small", onClick: () => downloadReport(report.report_id, `NeuroSense_Final_Report_${report.cycle_id || report.report_id}.pdf`), disabled: loading, children: "Download PDF" })] }, report.report_id))), history.length === 0 && finalReports.length === 0 && _jsx("div", { className: "empty-state", children: "No completed assessments yet." }), history.map((h, idx) => (_jsxs("div", { className: "report-card", children: [_jsxs("div", { children: [_jsxs("div", { className: "report-date", children: [h.session_label || `Session ${h.session_number || '?'}`, " \u00B7 ", h.scheduled_for || 'Date unavailable'] }), _jsxs("div", { className: "report-risk", children: ["Risk: ", _jsx("strong", { children: h.risk_class || 'Pending' }), " (", h.risk_probability != null ? `${Math.round(Number(h.risk_probability) * 100)}%` : 'n/a', ")"] }), _jsxs("div", { className: "report-risk", children: ["Completed ", h.completed_at ? formatTimestamp(h.completed_at) : 'Unknown time'] })] }), _jsx("button", { className: "form-submit small", onClick: () => generate(h.assessment_id || h._id), disabled: loading, children: "Download PDF" })] }, idx)))] })] }));
+    return (_jsxs("div", { className: "report-page", children: [_jsxs("div", { className: "page-intro", children: [_jsx("div", { className: "eyebrow", children: "Assessment archive" }), _jsx("h1", { children: "Reports and summaries" }), _jsx("p", { children: "Your screening reports, risk history, and recent insights are kept here for easy review." })] }), _jsxs("div", { className: "report-list", children: [notifications.length > 0 && _jsxs("div", { className: "assessment-suggestion", children: [_jsx("strong", { children: "Session messages" }), notifications.map((notification, index) => _jsxs("span", { children: [notification.message, notification.emailed ? ' Email sent.' : ''] }, `${notification.scheduled_for}-${index}`))] }), finalReports.map(report => (_jsxs("div", { className: "report-card final-report-card", children: [_jsxs("div", { children: [_jsx("div", { className: "report-date", children: "Final three-session report" }), _jsxs("div", { className: "report-risk", children: [report.session_count, " sessions \u00B7 generated ", report.generated_at ? formatTimestamp(report.generated_at) : 'Unknown date'] })] }), _jsx("button", { className: "form-submit small", onClick: () => downloadReport(report.report_id, `NeuroSense_Final_Report_${report.cycle_id || report.report_id}.pdf`), disabled: loading, children: "Download PDF" })] }, report.report_id))), history.length === 0 && finalReports.length === 0 && _jsx("div", { className: "empty-state", children: "No completed assessments yet." }), history.map((h, idx) => (_jsxs("div", { className: "report-card", children: [_jsxs("div", { children: [_jsxs("div", { className: "report-date", children: [h.session_label || `Session ${h.session_number || '?'}`, " \u00B7 ", h.scheduled_for || 'Date unavailable'] }), _jsxs("div", { className: "report-risk", children: ["Risk: ", _jsx("strong", { children: h.risk_class || 'Pending' }), " (", h.risk_probability != null ? `${Math.round(Number(h.risk_probability) * 100)}%` : 'n/a', ")"] }), _jsxs("div", { className: "report-risk", children: ["Completed ", h.completed_at ? formatTimestamp(h.completed_at) : 'Unknown time'] })] }), _jsxs("div", { className: "report-actions", children: [h.next_session_date && _jsx("button", { className: "form-submit small", onClick: async () => {
+                                            try {
+                                                const next = await api.post(`/assessment/${h.assessment_id || h._id}/next`);
+                                                navigate(`/assessment/lifestyle/${next.data.assessment._id}`);
+                                            }
+                                            catch (err) {
+                                                alert(err?.response?.data?.error || 'The next session is not available yet');
+                                            }
+                                        }, children: "Start next session" }), _jsx("button", { className: "form-submit small", onClick: () => generate(h.assessment_id || h._id), disabled: loading, children: "Download PDF" })] })] }, idx)))] })] }));
 }
 async function downloadReport(reportId, filename) {
     const fileRes = await api.get(`/reports/download/${reportId}`, { responseType: 'blob' });

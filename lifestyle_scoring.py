@@ -164,3 +164,26 @@ def score_concern(answers: dict) -> dict:
     avg = sum(risks) / len(risks)
     # concern_score: 0 = no concerns, 100 = maximum self-reported concern
     return {"concern_score": round(avg * 100, 1)}
+
+
+def compare_lifestyle_answers(previous_answers: dict, current_answers: dict) -> dict:
+    previous_answers = previous_answers or {}
+    current_answers = current_answers or {}
+    previous_score = score_lifestyle(previous_answers).get("lifestyle_score")
+    current_score = score_lifestyle(current_answers).get("lifestyle_score")
+    changed_answers = [
+        key for key in sorted(set(previous_answers) | set(current_answers))
+        if previous_answers.get(key) != current_answers.get(key)
+    ]
+    score_change = None
+    direction = "insufficient_data"
+    if previous_score is not None and current_score is not None:
+        score_change = round(current_score - previous_score, 1)
+        direction = "improving" if score_change > 0 else "declining" if score_change < 0 else "stable"
+    return {
+        "previous_lifestyle_score": previous_score,
+        "lifestyle_score_change": score_change,
+        "lifestyle_trend": direction,
+        "changed_answer_count": len(changed_answers),
+        "changed_answers": changed_answers,
+    }

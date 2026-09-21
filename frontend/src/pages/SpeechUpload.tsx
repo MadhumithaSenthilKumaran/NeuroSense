@@ -9,7 +9,7 @@ type SpeechFeature = { _id: string; transcript?: string | null; duration_s: numb
 
 export default function SpeechUpload() {
   const { id } = useParams<{ id: string }>()
-  const [task, setTask] = useState('reading')
+  const [task, setTask] = useState('')
   const [tasks, setTasks] = useState<SpeechTask[]>([])
   const [file, setFile] = useState<File | null>(null)
   const [localPoints, setLocalPoints] = useState<number[] | null>(null)
@@ -19,12 +19,22 @@ export default function SpeechUpload() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api.get('/speech/tasks').then(({ data }) => setTasks(data.tasks)).catch(() => setTasks([
-      { id: 'reading', title: 'Reading statement', prompt: 'Please read the paragraph aloud at a comfortable pace: Yesterday I went to the market with my family. We bought fruits, vegetables, and milk.' },
-    ]))
+    api.get('/speech/tasks').then(({ data }) => {
+      setTasks(data.tasks)
+      if (data.tasks.length) setTask(data.tasks[Math.floor(Math.random() * data.tasks.length)].id)
+    }).catch(() => {
+      const fallback = [{ id: 'reading', title: 'Reading statement', prompt: 'Please read the paragraph aloud at a comfortable pace: Yesterday I went to the market with my family. We bought fruits, vegetables, and milk.' }]
+      setTasks(fallback)
+      setTask('reading')
+    })
     if (id) api.get(`/speech/session/${id}`).then(({ data }) => {
-      if (!data.speech_set?.paragraph) return
-      setTasks(current => current.map(item => item.id === 'reading' ? { ...item, prompt: data.speech_set.paragraph } : item))
+      const options = data.speech_set?.options || []
+      if (options.length) {
+        const assignedTasks = options.map((item: any, index: number) => ({ id: index === 0 ? 'reading' : `reading_${index + 1}`, title: `Passage ${index + 1}`, prompt: item.paragraph }))
+        setTasks(assignedTasks)
+        setTask(assignedTasks[Math.floor(Math.random() * assignedTasks.length)].id)
+      }
+      else if (data.speech_set?.paragraph) setTasks(current => current.map(item => item.id === 'reading' ? { ...item, prompt: data.speech_set.paragraph } : item))
     }).catch(() => {})
   }, [id])
 
@@ -71,7 +81,7 @@ export default function SpeechUpload() {
   return <div className="speech-page">
     <header className="speech-header"><div><p className="eyebrow">VOICE ASSESSMENT / STEP 04</p><h1>Speech & language</h1><p className="lede">Complete one prompt in your own voice. NeuroSense will measure acoustic patterns and prepare them for your assessment.</p></div><div className="step-mark">04<span>/04</span></div></header>
     <div className="speech-grid">
-      <section className="speech-panel prompt-panel"><div className="panel-kicker">01 / Choose a prompt</div><div className="task-list">{tasks.map(item => <button key={item.id} className={`task-option ${task === item.id ? 'selected' : ''}`} onClick={() => { setTask(item.id); setResult(null); setStatus('Ready for a recording') }}><span>{item.title}</span><b>{task === item.id ? 'Selected' : 'Select'}</b></button>)}</div><div className="prompt-copy"><span className="quote-mark">&quot;</span><p>{selectedTask?.prompt || 'Loading prompt...'}</p></div>{selectedTask?.duration_hint_s && <small>Recommended response: about {selectedTask.duration_hint_s} seconds</small>}</section>
+      <section className="speech-panel prompt-panel"><div className="panel-kicker">01 / Assigned passage</div><div className="prompt-copy"><span className="quote-mark">&quot;</span><p>{selectedTask?.prompt || 'Loading passage...'}</p></div>{selectedTask?.duration_hint_s && <small>Recommended response: about {selectedTask.duration_hint_s} seconds</small>}</section>
       <section className="speech-panel capture-panel"><div className="panel-kicker">02 / Capture response</div><div className="capture-actions"><label className="dropzone"><input type="file" accept="audio/*" onChange={e => handleFileChange(e.target.files?.[0] || null)} /><strong>{file ? file.name : 'Choose an audio file'}</strong><span>WAV, MP3, M4A, WEBM or OGG - up to 25 MB</span></label><div className="or-divider">or record directly</div><AudioRecorder onRecorded={blob => { setFile(new File([blob], 'recording.webm', { type: 'audio/webm' })); upload(blob) }} /></div>{(localPoints || serverPoints) && <div className="waveform-wrap"><div className="waveform-label"><span>{serverPoints ? 'Processed waveform' : 'Local preview'}</span><span>{result ? `${result.duration_s}s` : 'Ready'}</span></div><Waveform points={serverPoints || localPoints || []} /></div>}<button className="primary-action" disabled={busy || !file} onClick={() => upload()}>{busy ? 'Processing...' : 'Upload and analyze'}<span>-&gt;</span></button><p className={`status-line ${status === 'Analysis complete' ? 'success' : ''}`}><i />{status}</p></section>
     </div>
     {result && <section className="results-panel"><div><div className="panel-kicker">03 / Results ready</div><h2>Speech signal captured</h2><p className="result-note">Your acoustic profile has been added to this assessment.</p></div><div className="metric-row"><Metric label="Duration" value={`${result.duration_s}s`} /><Metric label="Pitch" value={result.pitch_hz ? `${result.pitch_hz} Hz` : 'Not detected'} /><Metric label="Pause time" value={`${result.pause_duration_s}s`} /><Metric label="Speech rate" value={result.speech_rate_wpm ? `${result.speech_rate_wpm} WPM` : 'Transcript unavailable'} /><Metric label="Prompt match" value={result.content_match?.score != null ? `${result.content_match.score}%` : 'Unavailable'} /></div><div className="transcript"><span>Transcript</span><p>{result.transcript || 'Transcription is unavailable in lightweight mode. Acoustic features were extracted successfully.'}</p></div><Link className="continue-action" to={`/assessment/finalize/${id}`}>Continue to final review <span>-&gt;</span></Link></section>}

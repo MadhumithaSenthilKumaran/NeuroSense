@@ -1,6 +1,7 @@
 import os
 import re
 import uuid
+import re
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from bson import ObjectId
@@ -8,12 +9,13 @@ from werkzeug.utils import secure_filename
 
 from extensions import get_db
 from services.speech_features import extract_features, waveform_points
+from services.session_assessment import SPEECH_BANK
 from transcription import transcribe
 
 speech_bp = Blueprint("speech", __name__)
 
 ALLOWED_EXTENSIONS = {"wav", "mp3", "m4a", "webm", "ogg"}
-TASKS = {"reading"}
+TASK_PATTERN = re.compile(r"reading(?:_\d+)?$")
 
 
 def _content_match(transcript, expected):
@@ -30,8 +32,8 @@ def _allowed(filename):
 @speech_bp.post("/upload/<assessment_id>/<task>")
 @jwt_required()
 def upload_speech(assessment_id, task):
-    if task not in TASKS:
-        return jsonify(error=f"task must be one of {sorted(TASKS)}"), 400
+    if not TASK_PATTERN.fullmatch(task):
+        return jsonify(error="task must be a reading passage id"), 400
     try:
         assessment_object_id = ObjectId(assessment_id)
     except Exception:
@@ -66,13 +68,16 @@ def upload_speech(assessment_id, task):
         return jsonify(error=f"Could not process audio: {e}"), 422
 
     assigned_speech = assessment.get("assigned_sets", {}).get("speech", {})
+    speech_options = assigned_speech.get("options", [])
+    option_index = 0 if task == "reading" else int(task.rsplit("_", 1)[1]) - 1
+    selected_speech = speech_options[option_index] if option_index < len(speech_options) else assigned_speech
     doc = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
         "cycle_id": assessment.get("cycle_id"),
         "session_number": assessment.get("session_number", 1),
-        "speech_set_id": assessment.get("assigned_sets", {}).get("speech", {}).get("id"),
-        "content_match": _content_match(transcript, assigned_speech.get("paragraph")),
+        "speech_set_id": selected_speech.get("id"),
+        "content_match": _content_match(transcript, selected_speech.get("paragraph")),
         "task": task,
         "audio_path": save_path,
         "transcript": transcript,
@@ -109,13 +114,9 @@ def get_waveform(speech_feature_id):
 
 @speech_bp.get("/tasks")
 def get_tasks():
-    reading_prompt = "Please read the paragraph assigned to your session aloud at a comfortable pace."
     return jsonify(tasks=[
-        {
-            "id": "reading",
-            "title": "Reading statement",
-            "prompt": reading_prompt,
-        },
+        {"id": "reading" if index == 0 else f"reading_{index + 1}", "title": f"Passage {index + 1}", "prompt": item["paragraph"]}
+        for index, item in enumerate(SPEECH_BANK)
     ])
 
 

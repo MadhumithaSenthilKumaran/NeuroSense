@@ -23,6 +23,7 @@ def create_app(config_class=Config):
     from routes.lifestyle import lifestyle_bp
     from routes.reports import reports_bp
     from routes.knowledge import knowledge_bp
+    from routes.notifications import notifications_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(assessment_bp, url_prefix="/api/assessment")
@@ -31,6 +32,20 @@ def create_app(config_class=Config):
     app.register_blueprint(lifestyle_bp, url_prefix="/api/lifestyle")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
     app.register_blueprint(knowledge_bp, url_prefix="/api/knowledge")
+    app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
+
+    @app.get("/")
+    def home():
+        return jsonify(
+            service="NeuroSense API",
+            status="ok",
+            frontend="http://localhost:5173",
+            health="/api/health",
+        )
+
+    @app.get("/api/health")
+    def health():
+        return jsonify(service="NeuroSense API", status="ok")
 
     @app.errorhandler(404)
     def not_found(e):

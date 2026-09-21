@@ -1,9 +1,16 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function NavBar() {
   const { token, logout } = useAuth()
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('ns_theme') === 'dark')
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'
+    localStorage.setItem('ns_theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
+
   return (
     <nav className="site-nav">
       <div className="nav-links">
@@ -11,6 +18,15 @@ export default function NavBar() {
         <Link to="/knowledge" className="nav-link">About</Link>
       </div>
       <div className="nav-actions">
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={() => setDarkMode(value => !value)}
+          aria-label={darkMode ? 'Use light theme' : 'Use dark theme'}
+          title={darkMode ? 'Use light theme' : 'Use dark theme'}
+        >
+          {darkMode ? 'Light' : 'Dark'}
+        </button>
         {token ? (
           <>
             <Link to="/dashboard" className="nav-link nav-link-strong">Dashboard</Link>

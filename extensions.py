@@ -1,5 +1,7 @@
 from flask_jwt_extended import JWTManager
 from pymongo import MongoClient
+from pymongo.errors import ServerSelectionTimeoutError
+import time
 
 jwt = JWTManager()
 _client = None
@@ -31,20 +33,31 @@ def init_db(app):
     last_error = None
     for raw_uri in candidate_uris:
         uri = _with_database(raw_uri)
-        try:
-            _client = MongoClient(uri, serverSelectionTimeoutMS=5000)
-            _db = _client.get_default_database()
-            _db.command("ping")
-            app.config["MONGO_URI"] = uri
+        for attempt in range(3):
+            try:
+                _client = MongoClient(uri, serverSelectionTimeoutMS=15000, connectTimeoutMS=10000)
+                _db = _client.get_default_database()
+                _db.command("ping")
+                app.config["MONGO_URI"] = uri
+                break
+            except Exception as exc:  # pragma: no cover - depends on Atlas availability
+                last_error = exc
+                if _client is not None:
+                    _client.close()
+                _client = None
+                _db = None
+                if attempt < 2:
+                    time.sleep(1)
+        if _db is not None:
             break
-        except Exception as exc:  # pragma: no cover - depends on local DB availability
-            last_error = exc
-            _client = None
-            _db = None
     else:
-        raise RuntimeError(
-            f"Could not connect to MongoDB. Tried: {candidate_uris}. Last error: {last_error}"
-        )
+        detail = str(last_error)
+        if isinstance(last_error, ServerSelectionTimeoutError) and "DNS" in detail:
+            detail = (
+                "MongoDB Atlas hostname could not be resolved. Check internet/DNS access, "
+                "the Atlas cluster hostname in MONGO_URI, and VPN/firewall settings."
+            )
+        raise RuntimeError(f"Could not connect to MongoDB Atlas: {detail}") from last_error
 
     # Indexes — created idempotently on startup.
     _db.users.create_index("email", unique=True)

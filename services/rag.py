@@ -15,6 +15,7 @@ non-diagnostic disclaimer.
 
 import json
 import os
+import time
 from urllib.request import Request, urlopen
 
 from knowledge_base.kb_data import KNOWLEDGE_BASE
@@ -26,6 +27,29 @@ DISCLAIMER = (
 
 
 def _llm_refine(prompt: str):
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if gemini_key:
+        model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "systemInstruction": {"parts": [{"text": "Give concise, personalized, non-diagnostic health screening guidance."}]},
+            "generationConfig": {"temperature": 0.2},
+        }).encode("utf-8")
+        request = Request(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        for attempt in range(2):
+            try:
+                with urlopen(request, timeout=30) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception:
+                if attempt == 0:
+                    time.sleep(0.5)
+
     api_key = os.environ.get("LLM_API_KEY", "")
     if not api_key:
         return None
