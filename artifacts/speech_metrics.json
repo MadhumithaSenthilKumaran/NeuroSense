@@ -1,40 +1,40 @@
 {
-  "accuracy": 0.575,
-  "macro_f1": 0.4,
+  "accuracy": 0.7867,
+  "macro_f1": 0.7805,
   "classification_report": {
     "HC": {
-      "precision": 0.625,
-      "recall": 0.7142857142857143,
-      "f1-score": 0.6666666666666666,
-      "support": 21.0
+      "precision": 0.75,
+      "recall": 0.72,
+      "f1-score": 0.7346938775510204,
+      "support": 25.0
     },
     "MCI": {
-      "precision": 0.5333333333333333,
-      "recall": 0.5333333333333333,
-      "f1-score": 0.5333333333333333,
-      "support": 15.0
+      "precision": 0.7272727272727273,
+      "recall": 0.64,
+      "f1-score": 0.6808510638297872,
+      "support": 25.0
     },
     "Dementia": {
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1-score": 0.0,
-      "support": 4.0
+      "precision": 0.8620689655172413,
+      "recall": 1.0,
+      "f1-score": 0.9259259259259259,
+      "support": 25.0
     },
-    "accuracy": 0.575,
+    "accuracy": 0.7866666666666666,
     "macro avg": {
-      "precision": 0.38611111111111107,
-      "recall": 0.4158730158730159,
-      "f1-score": 0.39999999999999997,
-      "support": 40.0
+      "precision": 0.7797805642633229,
+      "recall": 0.7866666666666666,
+      "f1-score": 0.7804902891022446,
+      "support": 75.0
     },
     "weighted avg": {
-      "precision": 0.528125,
-      "recall": 0.575,
-      "f1-score": 0.55,
-      "support": 40.0
+      "precision": 0.7797805642633229,
+      "recall": 0.7866666666666666,
+      "f1-score": 0.7804902891022446,
+      "support": 75.0
     }
   },
-  "n_train": 117,
-  "n_test": 40,
-  "note": "Trained on only 157 samples; treat as an illustrative sub-model, not a clinically validated classifier. Retrain on a larger corpus before any real-world use."
+  "n_train": 225,
+  "n_test": 75,
+  "note": "Trained on 300 labeled samples from data/Labeled_speech_data.csv; treat as an illustrative sub-model, not a clinically validated classifier."
 }

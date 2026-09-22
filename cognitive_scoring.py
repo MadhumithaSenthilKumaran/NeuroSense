@@ -218,10 +218,15 @@ def score_game_results(results: dict) -> dict:
     number_score = round(number_task_score * 10, 1)
     praxis_trials = camera.get("praxis_trials", [])
     praxis_score = (sum(bool(trial.get("is_correct_match")) for trial in praxis_trials) / len(praxis_trials) * 100) if praxis_trials else 0.0
-    prompted_numbers = {int(number) for number in camera.get("prompted_numbers", []) if str(number).isdigit()}
-    recalled_numbers = {int(number) for number in camera.get("recalled_numbers", []) if str(number).isdigit()}
-    camera_recall_correct = len(prompted_numbers & recalled_numbers)
-    camera_recall_score = round(100 * camera_recall_correct / len(prompted_numbers), 1) if prompted_numbers else 0.0
+    prompted_sequence = [int(number) for number in camera.get("prompted_numbers", []) if str(number).isdigit()]
+    recalled_sequence = [int(number) for number in camera.get("recalled_numbers", []) if str(number).isdigit()]
+    camera_recall_total = len(prompted_sequence)
+    camera_recall_correct = sum(
+        expected == recalled_sequence[index]
+        for index, expected in enumerate(prompted_sequence)
+        if index < len(recalled_sequence)
+    )
+    camera_recall_score = round(100 * camera_recall_correct / camera_recall_total, 1) if camera_recall_total else 0.0
     expected = {str(word).lower() for word in camera.get("expected_words", [])}
     recalled = {str(word).lower() for word in camera.get("recalled_words", [])}
     word_score = 100.0 * len(expected & recalled) / len(expected) if expected else 0.0
@@ -258,8 +263,9 @@ def score_game_results(results: dict) -> dict:
         "camera_score": camera_score,
         "camera_recall_score": camera_recall_score,
         "camera_recall_correct": camera_recall_correct,
-        "camera_recall_total": len(prompted_numbers),
-        "camera_recalled_numbers": sorted(recalled_numbers),
+        "camera_recall_total": camera_recall_total,
+        "camera_recalled_numbers": recalled_sequence,
+        "camera_recall_accuracy": camera_recall_score,
         "camera_sequence_score": camera_sequence_score,
         "camera_correct_trials": correct_trials,
         "camera_total_trials": len(praxis_trials),

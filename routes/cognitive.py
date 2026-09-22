@@ -141,6 +141,7 @@ def submit_cognitive(assessment_id):
             'praxis_trials': game_result.get('praxis_trials', []),
             'sequence_score': game_result.get('camera_sequence_score', 0.0),
             'recall_score': game_result.get('camera_recall_score', 0.0),
+            'recall_accuracy': game_result.get('camera_recall_accuracy', 0.0),
             'recall_correct': game_result.get('camera_recall_correct', 0),
             'recall_total': game_result.get('camera_recall_total', 0),
         },

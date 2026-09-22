@@ -36,11 +36,13 @@ def test_cycle_schedule_covers_days_one_three_five_with_same_day_reminders():
     assert [item["reminder_for"] for item in schedule] == ["2026-09-01", "2026-09-03", "2026-09-05"]
 
 
-def test_speech_bank_has_twenty_distinct_passages_and_assigns_one_without_selector():
+def test_speech_bank_uses_distinct_dataset_passages_and_assigns_one_without_selector():
     assert len(SPEECH_BANK) == 20
-    assignment = assign_sets(used_speech_ids=["speech_01"])
+    assert all(item["paragraph"] for item in SPEECH_BANK)
+    assert all(item["id"].startswith("P") for item in SPEECH_BANK)
+    assignment = assign_sets(used_speech_ids=["P001"])
     assert len(assignment["speech"]["options"]) == 1
-    assert assignment["speech"]["id"] != "speech_01"
+    assert assignment["speech"]["id"] != "P001"
 
 
 def test_story_answers_are_scored_server_side():

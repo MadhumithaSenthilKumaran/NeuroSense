@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 
 from extensions import get_db
 from services.speech_features import extract_features, waveform_points
+from services.linguistic_features import extract_linguistic_features
 from services.session_assessment import SPEECH_BANK
 from transcription import transcribe
 
@@ -71,13 +72,34 @@ def upload_speech(assessment_id, task):
     speech_options = assigned_speech.get("options", [])
     option_index = 0 if task == "reading" else int(task.rsplit("_", 1)[1]) - 1
     selected_speech = speech_options[option_index] if option_index < len(speech_options) else assigned_speech
+    content_match = _content_match(transcript, selected_speech.get("paragraph"))
+    expected_word_count = content_match["expected_word_count"]
+    reading_accuracy = content_match["score"] if content_match["score"] is not None else 0.0
+    linguistic_features = extract_linguistic_features(transcript, features.get("duration_s")) or {
+        "filler_count": 0,
+        "token_count": 0,
+        "type_count": 0,
+        "type_token_ratio": 0.0,
+        "ma_ttr": 0.0,
+        "brunets_index": 0.0,
+        "content_density": 0.0,
+        "repetitions": 0,
+        "sentence_count": 0,
+        "average_words_per_sentence": 0.0,
+        "total_seconds": features.get("duration_s", 0.0),
+    }
     doc = {
         "assessment_id": assessment_id,
         "user_id": get_jwt_identity(),
         "cycle_id": assessment.get("cycle_id"),
         "session_number": assessment.get("session_number", 1),
         "speech_set_id": selected_speech.get("id"),
-        "content_match": _content_match(transcript, selected_speech.get("paragraph")),
+        "content_match": content_match,
+        "reading_accuracy": reading_accuracy,
+        "accuracy_rate": reading_accuracy,
+        "transcript_word_count": linguistic_features["token_count"],
+        "expected_word_count": expected_word_count,
+        "speech_linguistic_features": linguistic_features,
         "task": task,
         "audio_path": save_path,
         "transcript": transcript,
@@ -115,7 +137,7 @@ def get_waveform(speech_feature_id):
 @speech_bp.get("/tasks")
 def get_tasks():
     return jsonify(tasks=[
-        {"id": "reading" if index == 0 else f"reading_{index + 1}", "title": f"Passage {index + 1}", "prompt": item["paragraph"]}
+        {"id": "reading" if index == 0 else f"reading_{index + 1}", "title": item.get("title", f"Passage {index + 1}"), "prompt": item["paragraph"]}
         for index, item in enumerate(SPEECH_BANK)
     ])
 

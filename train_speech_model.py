@@ -1,7 +1,8 @@
 """
 Trains the SPEECH/LINGUISTIC sub-model on
-ml/data/Data_AUG_13_11_2024_output.csv (157 samples: HC / MCI / Dementia,
-each with linguistic features already computed from speech transcripts).
+data/Labeled_speech_data.csv (300 labeled samples: 100 HC, 100 MCI, and
+100 Dementia, each with linguistic features already computed from speech
+transcripts).
 
 Only features that NeuroSense can genuinely recompute at inference time
 from a live transcript are used (see services/linguistic_features.py) —
@@ -10,8 +11,7 @@ to produce a real MMSE score, and including it would create a feature the
 model needs but the app can never actually supply.
 
 Run:
-    cd backend
-    python -m ml.train_speech_model
+    python train_speech_model.py
 
 Artifacts written to ml/artifacts/:
     speech_xgb_model.json
@@ -29,7 +29,7 @@ from sklearn.metrics import accuracy_score, f1_score, classification_report
 import xgboost as xgb
 
 HERE = os.path.dirname(__file__)
-DATA_PATH = os.path.join(HERE, "data", "Data_AUG_13.11.2024_output.csv")
+DATA_PATH = os.path.join(HERE, "data", "Labeled_speech_data.csv")
 ARTIFACT_DIR = os.path.join(HERE, "artifacts")
 os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
@@ -49,7 +49,7 @@ def train():
     X = df[FEATURES].apply(pd.to_numeric, errors="coerce").fillna(0)
     y = df[TARGET_COL].astype(int)
 
-    # Small dataset (157 rows) -> stratified split, modest tree depth to
+    # Keep the class proportions stable in the holdout set and use modest tree depth to
     # limit overfitting, and we report metrics honestly rather than
     # overselling performance on such a small sample.
     X_train, X_test, y_train, y_test = train_test_split(
@@ -80,9 +80,8 @@ def train():
         "n_train": len(X_train),
         "n_test": len(X_test),
         "note": (
-            "Trained on only 157 samples; treat as an illustrative sub-model, "
-            "not a clinically validated classifier. Retrain on a larger corpus "
-            "before any real-world use."
+            "Trained on 300 labeled samples from data/Labeled_speech_data.csv; "
+            "treat as an illustrative sub-model, not a clinically validated classifier."
         ),
     }
     print("Speech/linguistic model metrics:", json.dumps(metrics, indent=2, default=str))

@@ -47,6 +47,10 @@ const numberTimeScore = (seconds: number | null) => {
   if (seconds <= 90) return 2;
   return 1;
 };
+const orderedAccuracy = (expected: number[], actual: number[]) => {
+  if (!expected.length) return 0;
+  return Math.round((expected.reduce((count, value, index) => count + (actual[index] === value ? 1 : 0), 0) / expected.length) * 1000) / 10;
+};
 const VISION_WASM =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const HAND_MODEL =
@@ -517,11 +521,6 @@ export default function Cognitive() {
     stopRecording();
     setCameraPhase("done");
   };
-  const addLiveNumberToStack = () => {
-    if (liveCount == null || cameraPhaseRef.current !== "gesture") return;
-    setCapturedNumberRecall((current) => [...current, liveCount]);
-    setCameraStatus(`Number ${liveCount} added to the memory stack`);
-  };
   const submit = async () => {
     if (
       submitting ||
@@ -783,17 +782,10 @@ export default function Cognitive() {
           </div>
           {cameraPhase === "gesture" && (
             <>
-              <button
-                className="secondary-action camera-add-number"
-                onClick={addLiveNumberToStack}
-                disabled={liveCount == null}
-              >
-                Add detected number to stack
-              </button>
               <button className="primary-action" onClick={finishCameraSession}>
                 Stop recording <span>-&gt;</span>
               </button>
-              <div className="camera-no-limit">Show a number, add it to the stack, then continue. Stop when finished.</div>
+              <div className="camera-no-limit">Each stable detected number is saved automatically. Stop when finished.</div>
             </>
           )}
           {cameraPhase === "done" && <div className="game-countdown">Recording stopped</div>}
@@ -805,7 +797,7 @@ export default function Cognitive() {
           {acceptedCaptures.length > 0 && (
             <div className="camera-number-recall">
               <h3>Numbers captured</h3>
-              <p>Each detected number is added below. Remove an entry if it was captured incorrectly.</p>
+              <p>Saved stack compared with the numbers shown on the previous slide.</p>
               <div className="recall-list">
                 {capturedNumberRecall.map((number, index) => (
                   <button
@@ -817,8 +809,17 @@ export default function Cognitive() {
                 ))}
               </div>
               <p className="game-status">
-                Stack entries: {capturedNumberRecall.length}
+                Stack entries: {capturedNumberRecall.length} · Accuracy: {orderedAccuracy(promptedNumbers, capturedNumberRecall)}%
               </p>
+              <div className="praxis-trial-list">
+                {promptedNumbers.map((number, index) => (
+                  <div className={capturedNumberRecall[index] === number ? "praxis-trial correct" : "praxis-trial"} key={`${number}-${index}`}>
+                    <span>Shown {number}</span>
+                    <b>Saved {capturedNumberRecall[index] ?? "-"}</b>
+                    <small>{capturedNumberRecall[index] === number ? "Correct position" : "Incorrect position"}</small>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {cameraError && <p className="form-error">{cameraError}</p>}
@@ -841,10 +842,11 @@ export default function Cognitive() {
           {cameraAnalyzed && (
             <div className="praxis-results">
               <strong>
-                Sequential accuracy:{" "}
+                Camera sequence accuracy:{" "}
                 {praxisTrials.filter((trial) => trial.is_correct_match).length}{" "}
                 / {praxisTrials.length}
               </strong>
+              <strong>Saved stack accuracy: {orderedAccuracy(promptedNumbers, capturedNumberRecall)}%</strong>
               {praxisTrials.map((trial) => (
                 <div
                   className={

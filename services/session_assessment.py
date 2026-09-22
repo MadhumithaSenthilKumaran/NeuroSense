@@ -1,5 +1,8 @@
+import csv
 import random
+import re
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 
 SESSION_OFFSETS = {1: 0, 2: 2, 3: 4}
@@ -37,29 +40,18 @@ def _memory_bank():
 
 
 def _speech_bank():
-    paragraphs = [
-        "Mara visited the community garden before breakfast. She watered the tomato plants, moved a small bench into the shade, and left a note for the next volunteer.",
-        "A blue bicycle stood outside the library after the rain. Daniel dried the seat, returned two books, and noticed that the entrance smelled like fresh paper.",
-        "Nina prepared soup for her neighbors on a cool afternoon. She measured the herbs carefully, labeled each container, and carried the warm meals across the street.",
-        "Omar took a train to the coast for a short holiday. He watched fishing boats from the window, bought a postcard, and called his sister before sunset.",
-        "The school music room needed a new arrangement. Lina placed the chairs in a circle, tested the old piano, and found a quiet place for the sheet music.",
-        "A market stall displayed oranges beside jars of honey. Sara compared the prices, chose three ripe oranges, and thanked the seller for the recipe suggestion.",
-        "Leo repaired a loose handle on the kitchen cupboard. He found the right screwdriver, tightened the two screws, and cleaned the wood before putting everything away.",
-        "Iris walked through the museum on a quiet Tuesday. A painting of a yellow boat caught her attention, so she read the description and sketched its shape.",
-        "Noah planned a picnic near the river. He packed sandwiches, checked the weather, and moved the blanket when the first patch of sunlight reached the grass.",
-        "A small bookstore opened beside the bus stop. Mia browsed the travel section, spoke with the owner, and chose a novel with a green cover.",
-        "The neighborhood held a lantern festival in the evening. Families gathered in the square, children carried paper lights, and musicians played near the fountain.",
-        "Ravi discovered a bird nest in the old oak tree. He watched from a distance, wrote the observation in his notebook, and reminded his cousin to stay quiet.",
-        "Elena organized photographs from a family trip. She placed them by date, wrote names on the back, and stored the finished collection in a wooden box.",
-        "A baker opened the shop before dawn. She mixed the dough, arranged the rolls in neat rows, and saved one warm pastry for the delivery driver.",
-        "Jonah joined a cooking class at the recreation center. The group prepared flatbread, shared tools, and compared the different ways each person seasoned the meal.",
-        "Priya found a lost umbrella on a bench near the station. She handed it to the information desk, described where she had found it, and caught the next bus home.",
-        "The town clock stopped during a windy night. Mechanics inspected the gears, replaced a worn spring, and listened for the bell before reopening the square.",
-        "A family cleaned the attic on a Saturday morning. They sorted old maps, donated several coats, and kept a wooden puzzle that was missing only one piece.",
-        "Theo practiced photography in the park. He adjusted the focus on a flower, waited for the clouds to move, and captured the moment the sunlight returned.",
-        "Grace hosted a small reading group after work. Everyone brought a different book, discussed one memorable chapter, and agreed to meet again the following month.",
-    ]
-    return [{"id": f"speech_{index + 1:02d}", "paragraph": paragraph} for index, paragraph in enumerate(paragraphs)]
+    dataset_path = Path(__file__).resolve().parents[1] / "data" / "Labeled_speech_data.csv"
+    passages = []
+    with dataset_path.open(newline="", encoding="utf-8-sig") as dataset:
+        for row in csv.DictReader(dataset):
+            paragraph = re.sub(r"\s+", " ", (row.get("Passage_Content", "") or "").strip())
+            if paragraph and paragraph not in [item["paragraph"] for item in passages]:
+                passages.append({
+                    "id": row.get("Passage_ID") or f"speech_{len(passages) + 1:03d}",
+                    "title": row.get("Passage_Title") or f"Passage {len(passages) + 1}",
+                    "paragraph": paragraph,
+                })
+    return passages
 
 
 STORY_BANK = _story_bank()
