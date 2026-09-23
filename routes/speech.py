@@ -26,6 +26,26 @@ def _content_match(transcript, expected):
     return {"score": round(len(matched) / len(expected_words) * 100, 1) if expected_words else None, "matched_words": sorted(matched), "expected_word_count": len(expected_words)}
 
 
+def _is_low_quality_transcript(transcript):
+    if not transcript or not transcript.strip():
+        return True
+    words = re.findall(r"[A-Za-z']+", transcript.lower())
+    if not words:
+        return True
+    if len(words) < 3:
+        return True
+    unique_words = len(set(words))
+    if len(words) <= 8 and unique_words <= 2:
+        return True
+    counts = {}
+    for word in words:
+        counts[word] = counts.get(word, 0) + 1
+    top_word_count = max(counts.values()) if counts else 0
+    if len(words) <= 15 and top_word_count / len(words) > 0.75 and unique_words <= 3:
+        return True
+    return False
+
+
 def _allowed(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -61,6 +81,15 @@ def upload_speech(assessment_id, task):
 
     try:
         transcript = transcribe(save_path)
+        current_app.logger.info("Speech transcript for %s: %r", filename, transcript)
+        if transcript is None:
+            if os.path.exists(save_path):
+                os.remove(save_path)
+            return jsonify(error="No speech transcript could be detected. Please record clearly and avoid silence or background noise."), 422
+        if _is_low_quality_transcript(transcript):
+            if os.path.exists(save_path):
+                os.remove(save_path)
+            return jsonify(error="Speech was too short or unclear. Please record the passage clearly and try again."), 422
         features = extract_features(save_path, transcript=transcript)
     except Exception as e:
         if os.path.exists(save_path):

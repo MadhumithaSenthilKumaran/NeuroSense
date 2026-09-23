@@ -19,10 +19,6 @@ _model_cache = {}
 
 
 def transcribe(audio_path: str):
-    lightweight = current_app.config.get("LIGHTWEIGHT_MODE", True)
-    if lightweight:
-        return None
-
     try:
         from faster_whisper import WhisperModel
     except ImportError:
@@ -32,10 +28,27 @@ def transcribe(audio_path: str):
         )
         return None
 
+    lightweight = current_app.config.get("LIGHTWEIGHT_MODE", False)
+    if lightweight:
+        current_app.logger.info(
+            "LIGHTWEIGHT_MODE is enabled, but transcription is still available because faster-whisper is installed."
+        )
+
     size = current_app.config["WHISPER_MODEL_SIZE"]
     if size not in _model_cache:
         _model_cache[size] = WhisperModel(size, device="cpu", compute_type="int8")
     model = _model_cache[size]
 
-    segments, _info = model.transcribe(audio_path, beam_size=5)
-    return " ".join(seg.text.strip() for seg in segments).strip()
+    segments, _info = model.transcribe(
+        audio_path,
+        beam_size=5,
+        language="en",
+        task="transcribe",
+        condition_on_previous_text=False,
+        vad_filter=True,
+        temperature=0.0,
+    )
+    transcript = " ".join(
+        seg.text.strip() for seg in segments if seg.text and seg.text.strip()
+    ).strip()
+    return transcript or None

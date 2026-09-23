@@ -27,7 +27,9 @@ def init_db(app):
 
     configured = app.config.get("MONGO_URI")
     if not configured:
-        raise RuntimeError("MONGO_URI must be configured; refusing to use a local MongoDB fallback")
+        app.config["MONGO_WARNING"] = "MONGO_URI is not configured. MongoDB-backed routes will not work until it is set."
+        return None
+
     candidate_uris = [configured]
 
     last_error = None
@@ -57,7 +59,8 @@ def init_db(app):
                 "MongoDB Atlas hostname could not be resolved. Check internet/DNS access, "
                 "the Atlas cluster hostname in MONGO_URI, and VPN/firewall settings."
             )
-        raise RuntimeError(f"Could not connect to MongoDB Atlas: {detail}") from last_error
+        app.config["MONGO_WARNING"] = f"MongoDB unavailable: {detail}"
+        return None
 
     # Indexes — created idempotently on startup.
     _db.users.create_index("email", unique=True)

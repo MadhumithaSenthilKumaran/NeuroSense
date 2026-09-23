@@ -139,6 +139,7 @@ export default function Cognitive() {
   const stableCounts = useRef<number[]>([]);
   const lastVideoTime = useRef(-1);
   const captureWindows = useRef<any[]>([]);
+  const replacementIndexRef = useRef<number | null>(null);
   const recordingStarted = useRef(0);
   const capturedCount = useRef(0);
   const stableSince = useRef(0);
@@ -376,6 +377,58 @@ export default function Cognitive() {
       });
     });
   };
+  const appendOrReplaceCapture = (capture: any) => {
+    const replacementIndex = replacementIndexRef.current;
+    const nextCapture = { ...capture };
+
+    setAcceptedCaptures((current) => {
+      const next = [...current];
+      if (replacementIndex !== null && replacementIndex >= 0 && replacementIndex < next.length) {
+        next[replacementIndex] = nextCapture;
+      } else if (next.length >= promptedNumbers.length) {
+        next[next.length - 1] = nextCapture;
+      } else {
+        next.push(nextCapture);
+      }
+      capturedCount.current = next.length;
+      return next;
+    });
+
+    setCapturedNumberRecall((current) => {
+      const next = [...current];
+      if (replacementIndex !== null && replacementIndex >= 0 && replacementIndex < next.length) {
+        next[replacementIndex] = nextCapture.detected_number;
+      } else if (next.length >= promptedNumbers.length) {
+        next[next.length - 1] = nextCapture.detected_number;
+      } else {
+        next.push(nextCapture.detected_number);
+      }
+      return next;
+    });
+
+    const nextCaptureWindows = [...captureWindows.current];
+    if (replacementIndex !== null && replacementIndex >= 0 && replacementIndex < nextCaptureWindows.length) {
+      nextCaptureWindows[replacementIndex] = nextCapture;
+    } else if (nextCaptureWindows.length >= promptedNumbers.length) {
+      nextCaptureWindows[nextCaptureWindows.length - 1] = nextCapture;
+    } else {
+      nextCaptureWindows.push(nextCapture);
+    }
+    captureWindows.current = nextCaptureWindows;
+    replacementIndexRef.current = null;
+  };
+
+  const removeCaptureAt = (index: number) => {
+    replacementIndexRef.current = index;
+
+    setAcceptedCaptures((current) => {
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      capturedCount.current = next.length;
+      return next;
+    });
+    setCapturedNumberRecall((current) => current.filter((_, itemIndex) => itemIndex !== index));
+    captureWindows.current = captureWindows.current.filter((_, itemIndex) => itemIndex !== index);
+  };
   const detectCameraHands = () => {
     const currentVideo = video.current;
     const currentLandmarker = landmarker.current;
@@ -422,10 +475,7 @@ export default function Cognitive() {
         setCameraStatus(
           hands.length > 1 ? "Two hands detected" : "One hand detected",
         );
-        if (
-          cameraPhaseRef.current === "gesture" &&
-          capturedCount.current < promptedNumbers.length
-        ) {
+        if (cameraPhaseRef.current === "gesture") {
           if (stable === stableValue.current) {
             if (!stableSince.current) stableSince.current = performance.now();
           } else {
@@ -438,18 +488,16 @@ export default function Cognitive() {
           ) {
             const now = performance.now();
             const start = Math.max(recordingStarted.current, now - 2500);
+            const targetNumber = promptedNumbers[Math.min(capturedCount.current, promptedNumbers.length - 1)];
             const capture = {
-              target_number: promptedNumbers[capturedCount.current],
+              target_number: targetNumber,
               detected_number: stable,
               accepted: true,
               response_time_ms: Math.round(now - start),
               start_seconds: (start - recordingStarted.current) / 1000,
               end_seconds: (now - recordingStarted.current) / 1000,
             };
-            captureWindows.current.push(capture);
-            capturedCount.current += 1;
-            setAcceptedCaptures((current) => [...current, capture]);
-            setCapturedNumberRecall((current) => [...current, stable]);
+            appendOrReplaceCapture(capture);
             setCameraStatus(`Number ${stable} captured automatically`);
             stableSince.current = 0;
             stableValue.current = null;
@@ -514,7 +562,17 @@ export default function Cognitive() {
   };
   const stopRecording = () => {
     if (animation.current) cancelAnimationFrame(animation.current);
-    if (recorder.current?.state === "recording") recorder.current.stop();
+    if (recorder.current?.state === "recording") {
+      recorder.current.stop();
+    }
+    if (stream.current) {
+      stream.current.getTracks().forEach((track) => track.stop());
+      stream.current = null;
+    }
+    if (video.current) {
+      video.current.pause();
+      video.current.srcObject = null;
+    }
   };
   const finishCameraSession = () => {
     setActionEnded(Date.now());
@@ -536,13 +594,15 @@ export default function Cognitive() {
           })
         : null;
       if (!videoBlob) throw new Error("No camera capture was recorded");
+      const finalAcceptedCaptures = acceptedCaptures.length === promptedNumbers.length ? acceptedCaptures : captureWindows.current;
+      const finalRecall = capturedNumberRecall.length === promptedNumbers.length ? capturedNumberRecall : finalAcceptedCaptures.map((capture) => capture.detected_number ?? capture);
       const form = new FormData();
       form.append("video", videoBlob, "praxis-capture.webm");
       promptedNumbers.forEach((number) =>
         form.append("prompted_numbers", String(number)),
       );
       form.append("gesture_start_seconds", "10");
-      form.append("capture_windows", JSON.stringify(captureWindows.current));
+      form.append("capture_windows", JSON.stringify(finalAcceptedCaptures));
       const praxis = await api.post(`/cognitive/praxis/analyze/${id}`, form);
       const trials = praxis.data.praxis_trials || [];
       setPraxisTrials(trials);
@@ -582,11 +642,11 @@ export default function Cognitive() {
           },
           camera_session: {
             prompted_numbers: promptedNumbers,
-            accepted_captures: acceptedCaptures,
-            recalled_numbers: capturedNumberRecall,
+            accepted_captures: finalAcceptedCaptures,
+            recalled_numbers: finalRecall,
             praxis_trials: trials,
-            action_duration_ms: acceptedCaptures.reduce(
-              (sum, capture) => sum + capture.response_time_ms,
+            action_duration_ms: finalAcceptedCaptures.reduce(
+              (sum, capture) => sum + (capture.response_time_ms || 0),
               0,
             ),
             recording_captured: true,
@@ -802,7 +862,7 @@ export default function Cognitive() {
                 {capturedNumberRecall.map((number, index) => (
                   <button
                     key={`${number}-${index}`}
-                    onClick={() => setCapturedNumberRecall((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                    onClick={() => removeCaptureAt(index)}
                   >
                     {number} x
                   </button>
